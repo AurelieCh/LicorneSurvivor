@@ -21,11 +21,11 @@ public final class Sprites {
     }
 
     /**
-     * La licorne : tête de face, crinière arc-en-ciel qui ondule, corne dorée en spirale, yeux qui clignent.
-     * @param g le contexte graphique
-     * @param x l'abscisse du centre de la licorne
-     * @param y0 l'ordonnée du centre de la licorne
-     * @param anim l'animation
+     * Dessine la licorne (joueur) à l'écran, avec ses yeux, sa crinière et sa corne.
+      * @param g Contexte graphique
+     * @param x Position x du centre de la licorne
+     * @param y0 Position y du centre de la licorne
+     * @param anim Animation
      */
     public static void licorne(Graphics2D g, int x, int y0, double anim) {
         int y = y0 + (int) Math.round(Math.sin(anim * 5) * 1.2); // petit flottement
@@ -170,6 +170,36 @@ public final class Sprites {
     public static void ennemi(Graphics2D g, Ennemi e) {
         int x = (int) e.x, y = (int) e.y, r = (int) e.rayon;
         Color c = e.flash > 0 ? Color.WHITE : e.col;
+        if (e.type == TypeEnnemi.TIREUR) { // sucette-canon : reste à distance et lance des bonbons
+            Color corps = e.monde == 1 ? new Color(110, 170, 185) : e.monde == 2 ? new Color(176, 98, 62) : e.col;
+            g.setColor(e.flash > 0 ? Color.WHITE : new Color(95, 62, 125));
+            g.fillRoundRect(x - r / 4, y - r - 7, r / 2 + 2, r, 6, 6); // le canon
+            g.setColor(e.flash > 0 ? Color.WHITE : corps);
+            g.fillOval(x - r, y - r, 2 * r, 2 * r);
+            g.setColor(new Color(255, 255, 255, 170));
+            g.fillOval(x - r / 2, y - r + 2, r / 2, r / 3);
+            g.setColor(new Color(95, 62, 125));
+            g.setStroke(new BasicStroke(2));
+            g.drawOval(x - r, y - r, 2 * r, 2 * r);
+            g.fillOval(x - r / 4 - 1, y - r - 9, r / 2 + 4, 6);        // bouche du canon
+            yeux(g, x, y - 2, r / 3, 4, true);
+            return;
+        }
+        if (e.type == TypeEnnemi.KAMIKAZE) { // bonbon-bombe : mèche allumée, pointes
+            g.setColor(e.flash > 0 ? Color.WHITE : new Color(98, 56, 124));
+            etoile(g, x, y, r + 6, r - 2, 0.3);
+            g.setColor(e.flash > 0 ? Color.WHITE : new Color(235, 72, 112));
+            g.fillOval(x - r + 2, y - r + 2, 2 * r - 4, 2 * r - 4);
+            g.setColor(new Color(255, 255, 255, 150));
+            g.fillOval(x - r / 2, y - r + 4, r / 2, r / 3);
+            g.setColor(new Color(240, 215, 130));
+            g.setStroke(new BasicStroke(2));
+            g.drawLine(x, y - r + 1, x + 6, y - r - 9);                // la mèche
+            g.setColor(new Color(255, 232, 90));
+            g.fillOval(x + 3, y - r - 14, 8, 8);
+            yeux(g, x, y - 1, r / 3, 4, true);
+            return;
+        }
         if (e.type == TypeEnnemi.GUIMAUVE) { // brute : silhouette ronde, détails adaptés au monde
             if (e.monde == 1) {
                 // Guimauve forestière : un petit champignon, sans perdre le corps moelleux.
@@ -308,7 +338,6 @@ public final class Sprites {
             g.setColor(new Color(110, 45, 30));
             g.drawOval(x - r / 2, y, r / 3, r / 3);
             yeux(g, x, y - 4, r / 3, 5, true);
-            return;
         }
     }
 }

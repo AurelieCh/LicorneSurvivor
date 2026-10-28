@@ -278,6 +278,8 @@ public class Audio implements Runnable {
 
     public void clic() { son(800, 1000, 0.05, 0.06, 0, 0); }
 
+    public void esquive() { son(500, 1400, 0.10, 0.05, 0, 0); }
+
     public void pouvoir() {
         double[] f = {660, 880, 1320};
         for (int i = 0; i < f.length; i++) son(f[i], f[i] * 1.05, 0.09, 0.07, 1, i * 0.05);

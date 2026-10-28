@@ -1,6 +1,7 @@
 package org.java.ressources.ui;
 
 import org.java.ressources.donnees.Personnage;
+import org.java.ressources.donnees.Progression;
 import org.java.ressources.donnees.Reglages;
 import org.java.ressources.donnees.Sauvegarde;
 import org.java.ressources.jeu.Etat;
@@ -130,7 +131,8 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
         try {
             switch (a[0]) {
                 case "help":
-                    consoleMessage("lvl N | xp N | spawn TYPE [N] | boss | kill | heal | sucre N | skill");
+                    consoleMessage("lvl N | xp N | spawn TYPE [N] | boss | elite | kill | heal | sucre N | skill");
+                    consoleMessage("arme I [niv] (0 aura 1 meteores 2 eclairs) | evo | esquive  (types : 4 tireur, 5 kamikaze)");
                     break;
                 case "lvl":
                     partie.debugNiveau(a.length > 1 ? Integer.parseInt(a[1]) : partie.niveau + 1);
@@ -150,6 +152,20 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
                 case "boss":
                     partie.debugSpawn(3, 1, true);
                     consoleMessage("Boss spawn.");
+                    break;
+                case "elite":
+                    consoleMessage(partie.debugElite() ? "Elite spawn." : "Elite impossible.");
+                    break;
+                case "arme":
+                    partie.debugArme(a.length > 1 ? Integer.parseInt(a[1]) : 0, a.length > 2 ? Integer.parseInt(a[2]) : 5);
+                    consoleMessage("Arme secondaire mise a jour.");
+                    break;
+                case "evo":
+                    partie.debugEvolutions();
+                    consoleMessage("Conditions d'evolution remplies : tape lvl pour les voir.");
+                    break;
+                case "esquive":
+                    consoleMessage(partie.activerEsquive() ? "Esquive !" : "Esquive en recharge.");
                     break;
                 case "kill":
                     partie.debugTuerTous();
@@ -212,7 +228,7 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
         s.anim += DT;
         if (s.etat == Etat.MULTI && s.reseau.lancementDemande()) {
             s.reseau.consommerLancement();
-            lancer(s.reseau.mondeLancement(), s.reseau.seedLancement());
+            lancerReseau(s.reseau.mondeLancement(), s.reseau.seedLancement());
         }
         s.audio.calme = s.etat == Etat.PAUSE || (s.etat == Etat.PARAMS && s.etatRetour == Etat.PAUSE);
         if (s.etat == Etat.JEU) {
@@ -262,6 +278,7 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
         if (touches.contains(KeyEvent.VK_D) || touches.contains(KeyEvent.VK_RIGHT)) masque |= 2;
         if (touches.contains(KeyEvent.VK_Z) || touches.contains(KeyEvent.VK_W) || touches.contains(KeyEvent.VK_UP)) masque |= 4;
         if (touches.contains(KeyEvent.VK_S) || touches.contains(KeyEvent.VK_DOWN)) masque |= 8;
+        if (touches.contains(KeyEvent.VK_SPACE) || touches.contains(KeyEvent.VK_SHIFT)) masque |= 16;
         return masque;
     }
 
@@ -348,6 +365,7 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
             else if (s.etat == Etat.PERSONNAGES) renduUi.personnages(g, s);
             else if (s.etat == Etat.COMMANDES) renduUi.commandes(g, s);
             else if (s.etat == Etat.MULTI) renduUi.multi(g, s);
+            else if (s.etat == Etat.BOUTIQUE) renduUi.boutique(g, s);
             else renduUi.params(g, s);
         }
         if (!s.popups.isEmpty()) renduUi.popup(g, s);
@@ -357,7 +375,17 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
     // Actions des menus
     // ------------------------------------------------------------------
     private void lancer() {
-        lancer(s.mondeSel, System.nanoTime());
+        boolean defi = s.defiSel;
+        partie.modeJeu = s.modeEffectif();
+        partie.defiJour = defi;
+        lancer(s.mondeSel, defi ? Partie.graineDuJour(s.mondeSel) : System.nanoTime());
+    }
+
+    /** Lancement d'une partie en coop LAN : toujours en mode normal (les clients ne connaissent pas les modes). */
+    private void lancerReseau(int monde, long seed) {
+        partie.modeJeu = Partie.MODE_NORMAL;
+        partie.defiJour = false;
+        lancer(monde, seed);
     }
 
     private void lancer(int monde, long seed) {
@@ -454,11 +482,33 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
         }
     }
 
+    private void ouvrirBoutique() {
+        s.etat = Etat.BOUTIQUE;
+        s.audio.clic();
+    }
+
     private void acheter(int i) {
         if (s.prog.acheter(i)) {
             s.audio.clic();
             sauver();
         }
+    }
+
+    private void changerMode() {
+        s.modeSel = (s.modeSel + 1) % 3;
+        if (!s.prog.gagne[s.mondeSel]) {
+            s.modeSel = 0; // verrouillé tant que le monde n'est pas terminé
+        }
+        s.audio.clic();
+    }
+
+    private void basculerDefi() {
+        s.defiSel = !s.defiSel;
+        s.audio.clic();
+    }
+
+    private void relancerChoix() {
+        partie.relancer();
     }
 
     private void choisirAmelioration(int i) {
@@ -607,6 +657,27 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
         return -1;
     }
 
+    /** Chiffre tapé de 1 à 9 (renvoie 0 à 8), y compris sur la rangée du haut d'un clavier AZERTY. */
+    private int chiffre(KeyEvent e) {
+        int k = e.getKeyCode();
+        char c = e.getKeyChar();
+        if (k >= KeyEvent.VK_1 && k <= KeyEvent.VK_9) return k - KeyEvent.VK_1;
+        if (k >= KeyEvent.VK_NUMPAD1 && k <= KeyEvent.VK_NUMPAD9) return k - KeyEvent.VK_NUMPAD1;
+        if (c >= '1' && c <= '9') return c - '1';
+        return switch (c) {
+            case '&' -> 0;
+            case 'é' -> 1;
+            case '"' -> 2;
+            case '\'' -> 3;
+            case '(' -> 4;
+            case '-' -> 5;
+            case 'è' -> 6;
+            case '_' -> 7;
+            case 'ç' -> 8;
+            default -> -1;
+        };
+    }
+
     @Override
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_F2) {
@@ -652,12 +723,32 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
                 else if (k == KeyEvent.VK_X) quitterJeu();
                 else if (k == KeyEvent.VK_S) s.etat = Etat.SUCCES;
                 else if (k == KeyEvent.VK_O) ouvrirParams(Etat.MENU);
+                else if (k == KeyEvent.VK_B) ouvrirBoutique();
+                else if (k == KeyEvent.VK_N) changerMode();
+                else if (k == KeyEvent.VK_J) basculerDefi();
                 else if (n >= 0) acheter(n);
+                break;
+            case BOUTIQUE:
+                if (k == KeyEvent.VK_ESCAPE || k == KeyEvent.VK_B) {
+                    s.etat = Etat.MENU;
+                    s.audio.clic();
+                } else if (k == KeyEvent.VK_UP) {
+                    s.boutiqueSel = (s.boutiqueSel + Progression.NB_META - 1) % Progression.NB_META;
+                } else if (k == KeyEvent.VK_DOWN) {
+                    s.boutiqueSel = (s.boutiqueSel + 1) % Progression.NB_META;
+                } else if (k == KeyEvent.VK_ENTER || k == KeyEvent.VK_SPACE) {
+                    acheter(s.boutiqueSel);
+                } else if (chiffre(e) >= 0 && chiffre(e) < Progression.NB_META) {
+                    s.boutiqueSel = chiffre(e);
+                    acheter(s.boutiqueSel);
+                }
                 break;
             case JEU:
                 if (k == KeyEvent.VK_P || k == KeyEvent.VK_ESCAPE) s.etat = Etat.PAUSE;
                 else if (k == KeyEvent.VK_O) ouvrirParams(Etat.JEU);
                 else if (k == KeyEvent.VK_E) partie.activerCompetence();
+                else if ((k == KeyEvent.VK_SPACE || k == KeyEvent.VK_SHIFT)
+                        && s.reseau.role() != ReseauLan.Role.CLIENT) partie.activerEsquive();
                 break;
             case PAUSE:
                 if (k == KeyEvent.VK_P || k == KeyEvent.VK_ESCAPE || valider) s.etat = Etat.JEU;
@@ -666,6 +757,7 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
                 break;
             case NIVEAU:
                 if (n >= 0) choisirAmelioration(n);
+                else if (k == KeyEvent.VK_R) relancerChoix();
                 break;
             case FIN:
                 if (valider) s.etat = Etat.MENU;
@@ -781,8 +873,29 @@ public class Jeu extends JPanel implements ActionListener, KeyListener, MouseLis
                 else if (Zones.boutonParams().contains(mx, my)) ouvrirParams(Etat.MENU);
                 else if (Zones.boutonMultijoueur().contains(mx, my)) ouvrirMulti();
                 else if (Zones.boutonQuitter().contains(mx, my)) quitterJeu();
+                else if (Zones.boutonBoutique().contains(mx, my)) ouvrirBoutique();
+                else if (Zones.boutonMode().contains(mx, my)) changerMode();
+                else if (Zones.boutonDefi().contains(mx, my)) basculerDefi();
+                break;
+            case BOUTIQUE:
+                if (Zones.boutonBoutiqueRetour().contains(mx, my)) {
+                    s.etat = Etat.MENU;
+                    s.audio.clic();
+                } else {
+                    for (int i = 0; i < Progression.NB_META; i++) {
+                        if (Zones.ligneBoutiquePlus(i).contains(mx, my)) {
+                            s.boutiqueSel = i;
+                            acheter(i);
+                            break;
+                        }
+                    }
+                }
                 break;
             case NIVEAU:
+                if (Zones.btnRelancer().contains(mx, my)) {
+                    relancerChoix();
+                    break;
+                }
                 for (int i = 0; i < partie.choix.size(); i++) {
                     if (Zones.carte(i).contains(mx, my)) {
                         choisirAmelioration(i);

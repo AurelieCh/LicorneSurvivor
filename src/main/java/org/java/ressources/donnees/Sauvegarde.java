@@ -32,15 +32,18 @@ public final class Sauvegarde {
             Properties p = new Properties();
             p.load(in);
             pr.sucre = entier(p, "sucre", 0);
-            pr.metaVie = entier(p, "metaVie", 0);
-            pr.metaDegats = entier(p, "metaDegats", 0);
-            pr.metaVitesse = entier(p, "metaVitesse", 0);
+            for (int i = 0; i < Progression.NB_META; i++) {
+                pr.meta[i] = Math.clamp(entier(p, Progression.META_CLES[i], 0), 0, pr.max(i));
+            }
             pr.personnageSel = Math.clamp(entier(p, "personnageSel", 0), 0, Personnage.TOUS.length - 1);
             pr.mondeMax = Math.clamp(entier(p, "mondeMax", 0), 0, Monde.TOUS.length - 1);
             pr.totalKills = entier(p, "totalKills", 0);
             pr.totalSucre = entier(p, "totalSucre", 0);
             pr.parties = entier(p, "parties", 0);
             pr.achats = entier(p, "achats", 0);
+            pr.totalEsquives = entier(p, "totalEsquives", 0);
+            pr.defiDate = p.getProperty("defiDate", "");
+            pr.defiScore = entier(p, "defiScore", 0);
             for (int i = 0; i < Monde.TOUS.length; i++) {
                 pr.meilleur[i] = entier(p, "meilleur" + i, 0);
                 pr.gagne[i] = "true".equals(p.getProperty("gagne" + i));
@@ -67,15 +70,18 @@ public final class Sauvegarde {
     public static void sauver(Progression pr, Reglages rg) {
         Properties p = new Properties();
         p.setProperty("sucre", String.valueOf(pr.sucre));
-        p.setProperty("metaVie", String.valueOf(pr.metaVie));
-        p.setProperty("metaDegats", String.valueOf(pr.metaDegats));
-        p.setProperty("metaVitesse", String.valueOf(pr.metaVitesse));
+        for (int i = 0; i < Progression.NB_META; i++) {
+            p.setProperty(Progression.META_CLES[i], String.valueOf(pr.meta[i]));
+        }
         p.setProperty("personnageSel", String.valueOf(pr.personnageSel));
         p.setProperty("mondeMax", String.valueOf(pr.mondeMax));
         p.setProperty("totalKills", String.valueOf(pr.totalKills));
         p.setProperty("totalSucre", String.valueOf(pr.totalSucre));
         p.setProperty("parties", String.valueOf(pr.parties));
         p.setProperty("achats", String.valueOf(pr.achats));
+        p.setProperty("totalEsquives", String.valueOf(pr.totalEsquives));
+        p.setProperty("defiDate", pr.defiDate);
+        p.setProperty("defiScore", String.valueOf(pr.defiScore));
         for (int i = 0; i < Monde.TOUS.length; i++) {
             p.setProperty("meilleur" + i, String.valueOf((int) pr.meilleur[i]));
             p.setProperty("gagne" + i, String.valueOf(pr.gagne[i]));

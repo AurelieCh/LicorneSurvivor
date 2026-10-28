@@ -26,6 +26,11 @@ public class Session {
     public double anim = 0;
 
     public int mondeSel = 0;
+    /** Mode choisi dans le menu (0 normal, 1 cauchemar, 2 infini) et défi du jour activé ou non. */
+    public int modeSel = 0;
+    public boolean defiSel = false;
+    /** Ligne sélectionnée dans la boutique. */
+    public int boutiqueSel = 0;
     public int paramSel = 0;
     public boolean confirmReset = false;
 
@@ -42,6 +47,11 @@ public class Session {
     public boolean surLeJeu() {
         return etat == Etat.JEU || etat == Etat.NIVEAU || etat == Etat.PAUSE || etat == Etat.FIN
                 || (etat == Etat.PARAMS && etatRetour != Etat.MENU);
+    }
+
+    /** Mode réellement utilisé : Cauchemar et Infini ne sont ouverts qu'une fois le monde terminé. */
+    public int modeEffectif() {
+        return !defiSel && prog.gagne[mondeSel] ? modeSel : 0;
     }
 
     public void fermerReseau() {

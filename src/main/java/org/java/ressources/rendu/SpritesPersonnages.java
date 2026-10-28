@@ -414,12 +414,12 @@ public final class SpritesPersonnages {
         for (int i = 0; i < 13; i++) {
             double a = -3.5 + i * (3.85 / 12);
             double r0 = 17, rt = 33 + (i % 2) * 3 + Math.sin(anim * 3 + i);
-            double cy = y - 2;
-            double tx = (double) x + Math.cos(a) * rt, ty = cy + Math.sin(a) * rt;
+            double cx = x, cy = y - 2;
+            double tx = cx + Math.cos(a) * rt, ty = cy + Math.sin(a) * rt;
             Path2D.Double p = new Path2D.Double();
-            p.moveTo((double) x + Math.cos(a - 0.2) * r0, cy + Math.sin(a - 0.2) * r0);
+            p.moveTo(cx + Math.cos(a - 0.2) * r0, cy + Math.sin(a - 0.2) * r0);
             p.lineTo(tx, ty);
-            p.lineTo((double) x + Math.cos(a + 0.2) * r0, cy + Math.sin(a + 0.2) * r0);
+            p.lineTo(cx + Math.cos(a + 0.2) * r0, cy + Math.sin(a + 0.2) * r0);
             p.closePath();
             g.setColor(i % 2 == 0 ? new Color(70, 150, 95) : new Color(105, 190, 120));
             g.fill(p);

@@ -172,8 +172,8 @@ public class Carte {
             }
             if (!change) break;
         }
-        double nx = Math.clamp(x, MARGE, largeur - MARGE);
-        double ny = Math.clamp(y, MARGE, hauteur - MARGE);
+        double nx = Math.clamp(largeur - MARGE, MARGE, x);
+        double ny = Math.clamp(hauteur - MARGE, MARGE, y);
         if (nx != x || ny != y) {
             touche = true;
             x = nx;

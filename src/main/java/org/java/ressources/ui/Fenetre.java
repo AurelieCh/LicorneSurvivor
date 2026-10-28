@@ -6,10 +6,6 @@ import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.GraphicsConfiguration;
 import java.awt.Rectangle;
-import java.awt.Image;
-import javax.imageio.ImageIO;
-import java.io.IOException;
-import java.net.URL;
 
 /** La fenêtre du jeu : redimensionnable, avec un plein écran bord à bord (F11). */
 public class Fenetre {
@@ -18,15 +14,6 @@ public class Fenetre {
 
     public Fenetre(Jeu jeu) {
         this.jeu = jeu;
-        try {
-            URL sourceIcone = Fenetre.class.getResource("/icon.png");
-            if (sourceIcone != null) {
-                Image icone = ImageIO.read(sourceIcone);
-                if (icone != null) frame.setIconImage(icone);
-            }
-        } catch (IOException ex) {
-            // L'icône est facultative lors d'un lancement depuis un IDE.
-        }
         frame.add(jeu);
         frame.pack();
         frame.setMinimumSize(new Dimension(480, 360));

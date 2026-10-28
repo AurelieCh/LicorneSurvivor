@@ -13,12 +13,17 @@ import org.java.ressources.entites.Ennemi;
 import org.java.ressources.entites.Gemme;
 import org.java.ressources.entites.Particule;
 import org.java.ressources.entites.Tir;
+import org.java.ressources.entites.TirEnnemi;
+import org.java.ressources.entites.ZoneDanger;
+import org.java.ressources.entites.Eclair;
+import org.java.ressources.donnees.ArmeSecondaire;
 import org.java.ressources.entites.TypeEnnemi;
 import org.java.ressources.entites.TypeArme;
 import org.java.ressources.reseau.ReseauLan;
 
 import java.awt.Color;
 import java.awt.event.KeyEvent;
+import java.time.LocalDate;
 import java.util.*;
 
 import static org.java.ressources.donnees.Constantes.DT;
@@ -34,8 +39,8 @@ public class Partie {
 
     private final Progression prog;
     private final Reglages reg;
-    private final Audio audio;
-    private final Random rnd = new Random();
+    final Audio audio;
+    final Random rnd = new Random();
 
     public Monde monde;
     public Carte carte;
@@ -108,15 +113,65 @@ public class Partie {
         return PROFILS[Math.clamp(personnage.id, 0, PROFILS.length - 1)];
     }
 
-    private Profil profil(Personnage personnage) {
-        return PROFILS[Math.clamp(personnage.id, 0, PROFILS.length - 1)];
-    }
-
     // pouvoirs en cours
     public double tBouclier, tTurbo, tXp, chanceBonus = 1;
     public double novaT, novaX, novaY;
     public int msgType;
     public double msgT;
+
+    // ---- esquive (dash) ----
+    public static final double ESQUIVE_DUREE = 0.18, ESQUIVE_RECHARGE = 2.2, ESQUIVE_VITESSE = 760;
+    public double esquiveT, esquiveRecharge, esquiveDx = 1, esquiveDy;
+    /** Temps écoulé depuis le début de la dernière esquive (sert à l'affichage). */
+    public double esquiveDepuis = 9;
+    /** Dernière direction de déplacement (l'esquive part dans cette direction). */
+    private double dirX = 1, dirY;
+    /** Position du joueur au pas précédent (le boss s'en sert pour viser devant lui). */
+    double dernierPx, dernierPy;
+    public int esquivesRun;
+
+    // ---- projectiles ennemis, zones qui explosent, éclairs ----
+    public final List<TirEnnemi> tirsEnnemis = new ArrayList<>();
+    public final List<ZoneDanger> zones = new ArrayList<>();
+    public final List<Eclair> eclairs = new ArrayList<>();
+
+    // ---- armes secondaires et évolutions ----
+    public final int[] niveauArme = new int[ArmeSecondaire.values().length];
+    public final boolean[] evolueeArme = new boolean[ArmeSecondaire.values().length];
+    final double[] minuteurArme = new double[ArmeSecondaire.values().length];
+    public boolean constellation;
+    public double rayonOrbite = 75, multOrbite = 1;
+    public int evolutionsRun;
+    /** Combien de fois chaque amélioration a été prise (sert aux conditions d'évolution). */
+    private final Map<String, Integer> ameliosPrises = new HashMap<>();
+
+    // ---- modes de jeu (réglés par le menu AVANT l'appel à lancer) ----
+    public static final int MODE_NORMAL = 0, MODE_CAUCHEMAR = 1, MODE_INFINI = 2;
+    public static final String[] MODIFICATEURS = {"Marée de gommes", "Pluie de pouvoirs", "Course folle", "Géants"};
+    public int modeJeu = MODE_NORMAL;
+    public boolean defiJour;
+    public int modificateurDefi = -1;
+    public boolean cauchemar, infini;
+    private double modSpawn = 1, modDrop = 1, modVitEnn = 1, modPv = 1, modXp = 1;
+    public int relances, revivesRestants, bossNum;
+    public boolean victoireAcquise;
+    private double prochainBoss, prochainElite, prochainEncerclement, gainXp = 1, xpReste;
+    /** Bandeau d'annonce au centre de l'écran (phase du boss, élite, évolution...). */
+    public String annonce = "";
+    public double annonceT;
+
+    public static String dateDuJour() {
+        return LocalDate.now().toString();
+    }
+
+    public static int modificateurDuJour() {
+        return Math.floorMod(dateDuJour().hashCode(), MODIFICATEURS.length);
+    }
+
+    /** Graine du défi du jour : la même carte pour tout le monde, toute la journée. */
+    public static long graineDuJour(int monde) {
+        return LocalDate.now().toEpochDay() * 1_000_003L + monde * 7919L + 17;
+    }
 
     // caméra et souris (position de la souris dans le repère de l'écran)
     public double camX, camY, cibleX, cibleY;
@@ -144,7 +199,7 @@ public class Partie {
         public boolean competence;
         public boolean competencePrecedente;
         public double tirTimer;
-        public double attaqueT;
+        public double esquiveT, esquiveRecharge, dirX = 1, dirY;
 
         public JoueurReseau(String id) {
             this.id = id;
@@ -191,14 +246,14 @@ public class Partie {
         issue = Issue.AUCUNE;
         px = carte.largeur / 2.0;
         py = carte.hauteur / 2.0;
-        pvieMax = 100 + 15 * prog.metaVie;
+        pvieMax = 100 + 15 * prog.meta[Progression.VIE];
         pvie = pvieMax;
-        degats = 10 * (1 + 0.10 * prog.metaDegats);
-        vitesse = 190 * (1 + 0.05 * prog.metaVitesse);
-        cadence = 1.6;
+        degats = 10 * (1 + 0.10 * prog.meta[Progression.DEGATS]);
+        vitesse = 190 * (1 + 0.05 * prog.meta[Progression.VITESSE]);
+        cadence = 1.6 * (1 + 0.04 * prog.meta[Progression.CADENCE]);
         projectiles = 1;
         perforation = 0;
-        portee = 90;
+        portee = 90 + 12 * prog.meta[Progression.AIMANT];
         porteeArme = 82;
         vitesseArme = 1;
         tirTimer = 0;
@@ -216,7 +271,7 @@ public class Partie {
         bossApparu = false;
         bossTue = false;
         tBouclier = tTurbo = tXp = 0;
-        chanceBonus = 1;
+        chanceBonus = 1 + 0.05 * prog.meta[Progression.CHANCE];
         novaT = 0;
         msgT = 0;
         Arrays.fill(coins, false);
@@ -235,7 +290,76 @@ public class Partie {
         nbFaisceaux = 0;
         java.util.Arrays.fill(faisceauOn, false);
         positionLocaleConnue = false;
+        reinitialiserNouveautes();
         majCamera(true);
+    }
+
+    /** Remet à zéro tout ce qui est propre à une partie (esquive, armes secondaires, modes, méta). */
+    private void reinitialiserNouveautes() {
+        tirsEnnemis.clear();
+        zones.clear();
+        eclairs.clear();
+        java.util.Arrays.fill(niveauArme, 0);
+        java.util.Arrays.fill(evolueeArme, false);
+        java.util.Arrays.fill(minuteurArme, 0.5);
+        ameliosPrises.clear();
+        constellation = false;
+        rayonOrbite = 75;
+        multOrbite = 1;
+        evolutionsRun = 0;
+        esquiveT = 0;
+        esquiveRecharge = 0;
+        esquiveDepuis = 9;
+        esquivesRun = 0;
+        dirX = 1;
+        dirY = 0;
+        relances = 1 + prog.meta[Progression.RELANCE];
+        revivesRestants = prog.meta[Progression.REVIVE];
+        gainXp = 1 + 0.05 * prog.meta[Progression.XP];
+        xpReste = 0;
+        bossNum = 0;
+        victoireAcquise = false;
+        prochainBoss = 0;
+        prochainElite = 45;
+        prochainEncerclement = 80;
+        annonce = "";
+        annonceT = 0;
+        cauchemar = modeJeu == MODE_CAUCHEMAR && !defiJour;
+        infini = modeJeu == MODE_INFINI && !defiJour;
+        modSpawn = modDrop = modVitEnn = modPv = modXp = 1;
+        modificateurDefi = defiJour ? modificateurDuJour() : -1;
+        if (defiJour) {
+            switch (modificateurDefi) {
+                case 0 -> modSpawn = 1.35;
+                case 1 -> {
+                    modDrop = 3;
+                    modPv = 1.25;
+                }
+                case 2 -> {
+                    modVitEnn = 1.15;
+                    vitesse *= 1.15;
+                }
+                default -> {
+                    modPv = 1.6;
+                    modXp = 1.5;
+                }
+            }
+            annonce("Défi du jour : " + MODIFICATEURS[modificateurDefi]);
+        } else if (cauchemar) {
+            annonce("Mode Cauchemar : ennemis plus forts, sucre x1,5");
+        } else if (infini) {
+            annonce("Mode Infini : un nouveau boss toutes les 90 s");
+        }
+    }
+
+    public void annonce(String texte) {
+        annonce = texte;
+        annonceT = 3.2;
+    }
+
+    /** Difficulté effective du monde (le mode Cauchemar l'augmente). */
+    double diff() {
+        return monde.diff * (cauchemar ? 1.35 : 1.0);
     }
 
     /** Applique les entrées reçues des clients et déplace leurs avatars sur la carte de l'hôte. */
@@ -264,11 +388,32 @@ public class Partie {
             if ((entree.touches() & 2) != 0) dx++;
             if ((entree.touches() & 4) != 0) dy--;
             if ((entree.touches() & 8) != 0) dy++;
+            joueur.esquiveRecharge = Math.max(0, joueur.esquiveRecharge - DT);
             if (dx != 0 || dy != 0) {
                 double n = Math.hypot(dx, dy);
-                double vitesseClient = vitesse * (tTurbo > 0 ? 1.25 : 1);
-                joueur.x += dx / n * vitesseClient * DT;
-                joueur.y += dy / n * vitesseClient * DT;
+                joueur.dirX = dx / n;
+                joueur.dirY = dy / n;
+            }
+            if ((entree.touches() & 16) != 0 && joueur.esquiveRecharge <= 0 && joueur.esquiveT <= 0) {
+                joueur.esquiveT = ESQUIVE_DUREE;
+                joueur.esquiveRecharge = ESQUIVE_RECHARGE;
+            }
+            if (joueur.esquiveT > 0 || dx != 0 || dy != 0) {
+                double pas;
+                double mx, my;
+                if (joueur.esquiveT > 0) {
+                    joueur.esquiveT -= DT;
+                    pas = ESQUIVE_VITESSE * DT;
+                    mx = joueur.dirX;
+                    my = joueur.dirY;
+                } else {
+                    double n = Math.hypot(dx, dy);
+                    pas = vitesse * (tTurbo > 0 ? 1.25 : 1) * DT;
+                    mx = dx / n;
+                    my = dy / n;
+                }
+                joueur.x += mx * pas;
+                joueur.y += my * pas;
                 double[] corrige = carte.repousser(joueur.x, joueur.y, RAYON_JOUEUR);
                 if (corrige != null) {
                     joueur.x = corrige[0];
@@ -279,24 +424,20 @@ public class Partie {
             joueur.cibleY = joueur.y;
             joueur.competencePrecedente = joueur.competence;
             joueur.competence = entree.competence();
-            joueur.attaqueT = Math.max(0, joueur.attaqueT - DT);
             joueur.tirTimer -= DT;
             if (joueur.tirTimer <= 0) {
                 Ennemi cible = plusProche(joueur.x, joueur.y, 640);
                 if (cible != null) {
                     tirerDepuis(joueur.x, joueur.y, joueur.personnage, cible);
-                    joueur.attaqueT = 0.35;
-                    Profil pf = profil(joueur.personnage);
-                    joueur.tirTimer = 1.0 / (cadence * pf.cadence * (tTurbo > 0 ? 1.8 : 1.0));
+                    joueur.tirTimer = joueur.personnage.typeArme == TypeArme.BOMBE ? 2.8 : 1.6;
                 }
             }
             if (joueur.competence && !joueur.competencePrecedente) {
                 for (Ennemi ennemi : ennemis) {
                     if (Math.hypot(ennemi.x - joueur.x, ennemi.y - joueur.y) < 180) {
-                        blesser(ennemi, degats * profil(joueur.personnage).degats * 0.35);
+                        blesser(ennemi, degats * 0.35);
                     }
                 }
-                joueur.attaqueT = 0.6;
             }
         }
     }
@@ -308,15 +449,18 @@ public class Partie {
         for (JoueurReseau joueur : joueursReseau) {
             b.append(';').append(joueur.id).append(',').append(Math.round(joueur.x)).append(',')
                     .append(Math.round(joueur.y)).append(',').append(Math.round(joueur.vie))
-                    .append(',').append(joueur.personnage.id).append(',')
-                    .append(Math.round(joueur.attaqueT * 100)).append(',').append(joueur.competence);
+                    .append(',').append(joueur.personnage.id);
         }
         b.append("|E:");
         for (int i = 0; i < ennemis.size(); i++) {
             if (i > 0) b.append(';');
             Ennemi e = ennemis.get(i);
             b.append(Math.round(e.x)).append(',').append(Math.round(e.y)).append(',')
-                    .append(Math.round(e.pv)).append(',').append(e.type.ordinal()).append(',').append(e.boss);
+                    .append(Math.round(e.pv)).append(',').append(e.type.ordinal()).append(',').append(e.boss)
+                    .append(',').append(e.elite).append(',').append(Math.round(e.rayon))
+                    .append(',').append(Math.round(e.pvMax)).append(',').append(e.etape)
+                    .append(',').append(e.attaque).append(',').append(Math.round(e.minuteur * 100))
+                    .append(',').append(Math.round(Math.atan2(e.dirY, e.dirX) * 100));
         }
         b.append("|T:");
         for (int i = 0; i < tirs.size(); i++) {
@@ -326,6 +470,22 @@ public class Partie {
                     .append(Math.round(t.vx)).append(',').append(Math.round(t.vy)).append(',')
                     .append(Math.round(t.vie * 100)).append(',').append(t.arme.ordinal()).append(',')
                     .append(Math.round(t.rayonExplosion));
+        }
+        b.append("|B:");
+        for (int i = 0; i < tirsEnnemis.size(); i++) {
+            if (i > 0) b.append(';');
+            TirEnnemi t = tirsEnnemis.get(i);
+            b.append(Math.round(t.x)).append(',').append(Math.round(t.y)).append(',')
+                    .append(Math.round(t.rayon)).append(',').append(t.genre);
+        }
+        b.append("|Z:");
+        for (int i = 0; i < zones.size(); i++) {
+            if (i > 0) b.append(';');
+            ZoneDanger z = zones.get(i);
+            b.append(Math.round(z.x)).append(',').append(Math.round(z.y)).append(',')
+                    .append(Math.round(z.rayon)).append(',').append(Math.round(z.delai * 100)).append(',')
+                    .append(Math.round(z.delaiMax * 100)).append(',').append(z.ennemie).append(',')
+                    .append(z.explosee).append(',').append(Math.round(z.apres * 100));
         }
         return b.toString();
     }
@@ -361,10 +521,6 @@ public class Partie {
                     joueur.definirPosition(x, y);
                     joueur.vie = vie;
                     if (id >= 0 && id < Personnage.TOUS.length) joueur.personnage = Personnage.TOUS[id];
-                    if (champs.length >= 7) {
-                        joueur.attaqueT = Double.parseDouble(champs[5]) / 100;
-                        joueur.competence = champs.length >= 8 && Boolean.parseBoolean(champs[6]);
-                    }
                 } else {
                     if (!positionLocaleConnue) {
                         px = x;
@@ -394,7 +550,20 @@ public class Partie {
                     e.pvMax = e.pv;
                     e.type = TypeEnnemi.depuisId(Integer.parseInt(champs[3]));
                     e.boss = Boolean.parseBoolean(champs[4]);
-                    e.rayon = e.boss ? 48 : 16;
+                    e.monde = monde.id;
+                    if (champs.length >= 12) { // nouveau format : taille réelle, élite, état du boss
+                        e.elite = Boolean.parseBoolean(champs[5]);
+                        e.rayon = Double.parseDouble(champs[6]);
+                        e.pvMax = Math.max(e.pv, Double.parseDouble(champs[7]));
+                        e.etape = Integer.parseInt(champs[8]);
+                        e.attaque = Integer.parseInt(champs[9]);
+                        e.minuteur = Double.parseDouble(champs[10]) / 100;
+                        double angle = Double.parseDouble(champs[11]) / 100;
+                        e.dirX = Math.cos(angle);
+                        e.dirY = Math.sin(angle);
+                    } else {
+                        e.rayon = e.boss ? 48 : 16;
+                    }
                     e.col = e.boss ? monde.bossCol : monde.palette[0];
                     ennemis.add(e);
                 } catch (NumberFormatException ignored) {
@@ -422,6 +591,44 @@ public class Partie {
                     tirs.add(t);
                 } catch (NumberFormatException ignored) {
                     // Un projectile invalide n'empêche pas les autres d'être affichés.
+                }
+            }
+        }
+        tirsEnnemis.clear();
+        if (sections.length > 3 && sections[3].startsWith("B:")) {
+            for (String ligne : sections[3].substring(2).split(";")) {
+                String[] champs = ligne.split(",");
+                if (champs.length < 4) continue;
+                try {
+                    TirEnnemi t = new TirEnnemi();
+                    t.x = Double.parseDouble(champs[0]);
+                    t.y = Double.parseDouble(champs[1]);
+                    t.rayon = Double.parseDouble(champs[2]);
+                    t.genre = Integer.parseInt(champs[3]);
+                    tirsEnnemis.add(t);
+                } catch (NumberFormatException ignored) {
+                    // Un projectile ennemi invalide est simplement ignoré.
+                }
+            }
+        }
+        zones.clear();
+        if (sections.length > 4 && sections[4].startsWith("Z:")) {
+            for (String ligne : sections[4].substring(2).split(";")) {
+                String[] champs = ligne.split(",");
+                if (champs.length < 8) continue;
+                try {
+                    ZoneDanger z = new ZoneDanger();
+                    z.x = Double.parseDouble(champs[0]);
+                    z.y = Double.parseDouble(champs[1]);
+                    z.rayon = Double.parseDouble(champs[2]);
+                    z.delai = Double.parseDouble(champs[3]) / 100;
+                    z.delaiMax = Math.max(0.01, Double.parseDouble(champs[4]) / 100);
+                    z.ennemie = Boolean.parseBoolean(champs[5]);
+                    z.explosee = Boolean.parseBoolean(champs[6]);
+                    z.apres = Double.parseDouble(champs[7]) / 100;
+                    zones.add(z);
+                } catch (NumberFormatException ignored) {
+                    // Une zone invalide est simplement ignorée.
                 }
             }
         }
@@ -462,26 +669,47 @@ public class Partie {
 
     /** Termine la partie (mort, victoire ou abandon) et distribue le sucre. */
     public void terminer(boolean gagneLaPartie) {
-        victoire = gagneLaPartie;
-        gainRun = kills / 2 + (int) (temps / 10) + (gagneLaPartie ? 100 * (mondeJeu + 1) : 0);
+        boolean vic = gagneLaPartie || victoireAcquise;
+        victoire = vic;
+        double mult = (cauchemar ? 1.5 : 1.0) * (defiJour ? 1.5 : 1.0);
+        int base = kills / 2 + (int) (temps / 10) + (vic ? 100 * (mondeJeu + 1) : 0) + (infini ? 60 * bossNum : 0);
+        gainRun = (int) Math.round(base * mult);
         prog.sucre += gainRun;
         prog.totalSucre += gainRun;
         prog.meilleur[mondeJeu] = Math.max(prog.meilleur[mondeJeu], temps);
         if (gagneLaPartie) {
-            prog.gagne[mondeJeu] = true;
-            prog.debloquer("boss" + (mondeJeu + 1));
-            if (!degatsSubis) prog.debloquer("intouchable");
-            if (mondeJeu == prog.mondeMax && prog.mondeMax < Monde.TOUS.length - 1) {
-                prog.mondeMax++;
-                nouveauMonde = true;
-            }
-            audio.victoire();
+            validerVictoire();
+        } else if (victoireAcquise) {
+            audio.victoire(); // mode Infini : la victoire était déjà acquise
         } else {
             audio.defaite();
+        }
+        if (defiJour) {
+            String date = dateDuJour();
+            int score = kills + (int) temps + (vic ? 500 : 0);
+            if (!date.equals(prog.defiDate)) {
+                prog.defiDate = date;
+                prog.defiScore = 0;
+            }
+            prog.defiScore = Math.max(prog.defiScore, score);
         }
         explosion(px, py, 40, Color.WHITE);
         issue = Issue.FIN;
         prog.verifierGlobal();
+    }
+
+    /** Premier boss vaincu : succès, monde suivant, etc. (une seule fois par partie). */
+    private void validerVictoire() {
+        prog.gagne[mondeJeu] = true;
+        prog.debloquer("boss" + (mondeJeu + 1));
+        if (!degatsSubis) prog.debloquer("intouchable");
+        if (cauchemar) prog.debloquer("cauchemar");
+        if (defiJour) prog.debloquer("defi");
+        if (mondeJeu == prog.mondeMax && prog.mondeMax < Monde.TOUS.length - 1) {
+            prog.mondeMax++;
+            nouveauMonde = true;
+        }
+        audio.victoire();
     }
 
     // ------------------------------------------------------------------
@@ -498,14 +726,22 @@ public class Partie {
         msgT = Math.max(0, msgT - DT);
         brulure = Math.max(0, brulure - DT);
         competenceTimer = Math.max(0, competenceTimer - DT);
+        esquiveRecharge = Math.max(0, esquiveRecharge - DT);
+        esquiveDepuis += DT;
+        annonceT = Math.max(0, annonceT - DT);
 
+        dernierPx = px;
+        dernierPy = py;
         deplacerJoueur(touches);
 
         // attaque automatique propre à chaque personnage (voir PROFILS)
         attaqueDeBase();
+        ArmesSecondaires.maj(this);
 
         majTirs();
         majEtoiles();
+        majTirsEnnemis();
+        majZones();
         majApparitions();
         if (!majEnnemis()) return; // la partie vient de se terminer
         majBonus();
@@ -652,13 +888,21 @@ public class Partie {
     private void deplacerJoueur(Set<Integer> touches) {
         double vit = vitesse * (tTurbo > 0 ? 1.25 : 1.0);
         double nx = px, ny = py;
-        if (reg.modeSouris) {
+        if (esquiveT > 0) { // esquive : bond rapide, invulnérable
+            esquiveT -= DT;
+            nx += esquiveDx * ESQUIVE_VITESSE * DT;
+            ny += esquiveDy * ESQUIVE_VITESSE * DT;
+            invuln = Math.max(invuln, 0.1);
+            if (reg.effets && rnd.nextInt(2) == 0) explosion(px, py, 1, Color.WHITE);
+        } else if (reg.modeSouris) {
             double ddx = cibleX + camX - px, ddy = cibleY + camY - py;
             double d = Math.hypot(ddx, ddy);
             if (d > 3) {
                 double pas = Math.min(d, vit * DT);
                 nx += ddx / d * pas;
                 ny += ddy / d * pas;
+                dirX = ddx / d;
+                dirY = ddy / d;
             }
         } else {
             double dx = 0, dy = 0;
@@ -670,6 +914,8 @@ public class Partie {
                 double n = Math.hypot(dx, dy);
                 nx += dx / n * vit * DT;
                 ny += dy / n * vit * DT;
+                dirX = dx / n;
+                dirY = dy / n;
             }
         }
         double[] c = carte.repousser(nx, ny, RAYON_JOUEUR);
@@ -808,9 +1054,9 @@ public class Partie {
         angleOrbite += 3.2 * DT;
         for (int i = 0; i < etoiles; i++) {
             double a = angleOrbite + i * 2 * Math.PI / etoiles;
-            double sx = px + Math.cos(a) * 75, sy = py + Math.sin(a) * 75;
+            double sx = px + Math.cos(a) * rayonOrbite, sy = py + Math.sin(a) * rayonOrbite;
             for (Ennemi en : ennemis) {
-                if (Math.hypot(en.x - sx, en.y - sy) < en.rayon + 12) blesser(en, degats * 2.5 * DT);
+                if (Math.hypot(en.x - sx, en.y - sy) < en.rayon + 12) blesser(en, degats * 2.5 * multOrbite * DT);
             }
         }
     }
@@ -818,20 +1064,109 @@ public class Partie {
     private void majApparitions() {
         spawnTimer -= DT;
         if (spawnTimer <= 0 && ennemis.size() < 250) {
-            spawnTimer = Math.max(0.3, (1.1 - temps * 0.007) / (1 + (monde.diff - 1) * 0.4));
+            spawnTimer = Math.max(0.3, (1.1 - temps * 0.007) / (1 + (diff() - 1) * 0.4)) / modSpawn;
             int n = 1 + (int) (temps / 60);
             for (int i = 0; i < n; i++) {
                 double r = rnd.nextDouble();
                 TypeEnnemi type = TypeEnnemi.MACARON;
                 if (temps > 25 && r < 0.20) type = TypeEnnemi.GUIMAUVE;
                 else if (temps > 10 && r < 0.45) type = TypeEnnemi.GOMME;
+                // les nouveaux ennemis arrivent plus tard dans la partie
+                double r2 = rnd.nextDouble();
+                if (temps > 35 && r2 < 0.10 && compter(TypeEnnemi.TIREUR) < 7) type = TypeEnnemi.TIREUR;
+                else if (temps > 50 && r2 < 0.19) type = TypeEnnemi.KAMIKAZE;
                 spawnEnnemi(type, false);
             }
+        }
+        // événements : élite et encerclement (pas pendant un combat de boss)
+        if (temps >= prochainElite && bossVivant()) {
+            if (spawnElite()) prochainElite = temps + (cauchemar ? 30 : 42);
+            else prochainElite = temps + 1;
+        }
+        if (temps >= prochainEncerclement && bossVivant()) {
+            prochainEncerclement = temps + 85;
+            encerclement();
         }
         if (!bossApparu && temps >= monde.dureeBoss) {
             bossApparu = true;
             spawnEnnemi(TypeEnnemi.BOSS, true);
+        } else if (infini && bossApparu && prochainBoss > 0 && temps >= prochainBoss && bossVivant()) {
+            prochainBoss = 0;
+            spawnEnnemi(TypeEnnemi.BOSS, true);
+            annonce("Un nouveau boss arrive, plus solide !");
         }
+    }
+
+    boolean bossVivant() {
+        for (Ennemi e : ennemis) if (e.boss) return false;
+        return true;
+    }
+
+    private int compter(TypeEnnemi type) {
+        int n = 0;
+        for (Ennemi e : ennemis) if (e.type == type) n++;
+        return n;
+    }
+
+    /** Un ennemi plus gros, plus solide, qui lâche toujours un pouvoir. */
+    private boolean spawnElite() {
+        TypeEnnemi[] types = {TypeEnnemi.MACARON, TypeEnnemi.GUIMAUVE, TypeEnnemi.GOMME, TypeEnnemi.TIREUR};
+        int avant = ennemis.size();
+        spawnEnnemi(types[rnd.nextInt(types.length)], false);
+        if (ennemis.size() <= avant) return false;
+        Ennemi e = ennemis.getLast();
+        e.elite = true;
+        e.pvMax *= 6;
+        e.pv = e.pvMax;
+        e.rayon *= 1.45;
+        e.degats *= 1.4;
+        e.vitesse *= 0.95;
+        annonce("Un ennemi élite approche !");
+        return true;
+    }
+
+    /** Un cercle de gommes se referme autour du joueur. */
+    private void encerclement() {
+        annonce("Encerclement !");
+        int n = 22;
+        for (int k = 0; k < n; k++) {
+            double a = k * 2 * Math.PI / n;
+            double x = px + Math.cos(a) * 560, y = py + Math.sin(a) * 560;
+            if (x < 40 || x > carte.largeur - 40 || y < 40 || y > carte.hauteur - 40) continue;
+            if (carte.libre(x, y, 24)) continue;
+            creerEnnemiA(TypeEnnemi.GOMME, x, y);
+        }
+    }
+
+    /** Crée un ennemi à une position précise (renforts du boss, encerclement). */
+    Ennemi creerEnnemiA(TypeEnnemi type, double x, double y) {
+        if (ennemis.size() >= 320) return null;
+        Ennemi e = new Ennemi();
+        e.x = x;
+        e.y = y;
+        initialiserEnnemi(e, type, false);
+        ennemis.add(e);
+        return e;
+    }
+
+    /** Déplace un ennemi vers l'angle donné en contournant les obstacles (sauf le boss, qui écrase tout). */
+    void avancerEnnemi(Ennemi en, double ang, double vit) {
+        if (en.contourne > 0) {
+            ang += en.sens * 1.1;
+            en.contourne -= DT;
+        }
+        double nx = en.x + Math.cos(ang) * vit * DT;
+        double ny = en.y + Math.sin(ang) * vit * DT;
+        if (!en.boss) {
+            double[] c = carte.repousser(nx, ny, en.rayon * 0.8);
+            if (c != null) {
+                nx = c[0];
+                ny = c[1];
+                if (en.contourne <= 0) en.contourne = 0.6;
+            }
+        }
+        en.x = nx;
+        en.y = ny;
     }
 
     /** Déplace les ennemis et gère les contacts. Renvoie false si la partie vient de se terminer. */
@@ -845,52 +1180,182 @@ public class Partie {
                 continue;
             }
             // trop loin sur la grande carte : on le retire (il sera remplacé par de nouvelles apparitions)
-            if (!en.boss && Math.hypot(en.x - px, en.y - py) > 1500) {
+            if (!en.boss && !en.elite && Math.hypot(en.x - px, en.y - py) > 1500) {
                 ennemis.remove(i);
                 continue;
             }
-            double ang = Math.atan2(py - en.y, px - en.x);
-            if (en.contourne > 0) {
-                ang += en.sens * 1.1;
-                en.contourne -= DT;
-            }
-            double nx = en.x + Math.cos(ang) * en.vitesse * DT;
-            double ny = en.y + Math.sin(ang) * en.vitesse * DT;
-            if (!en.boss) { // le boss est trop gros : il écrase tout sur son passage
-                double[] c = carte.repousser(nx, ny, en.rayon * 0.8);
-                if (c != null) {
-                    nx = c[0];
-                    ny = c[1];
-                    if (en.contourne <= 0) en.contourne = 0.6;
-                }
-            }
-            en.x = nx;
-            en.y = ny;
+            if (en.boss) IaEnnemis.boss(this, en);
+            else if (en.type == TypeEnnemi.TIREUR) IaEnnemis.tireur(this, en);
+            else if (en.type == TypeEnnemi.KAMIKAZE) IaEnnemis.kamikaze(this, en);
+            else avancerEnnemi(en, Math.atan2(py - en.y, px - en.x), en.vitesse);
 
-            if (invuln <= 0 && tBouclier <= 0 && Math.hypot(px - en.x, py - en.y) < en.rayon + RAYON_JOUEUR) {
-                pvie -= en.degats;
-                invuln = 0.8;
-                shake = 10;
-                degatsSubis = true;
-                audio.degat();
-                explosion(px, py, 12, new Color(255, 120, 160));
-            }
+            if (Math.hypot(px - en.x, py - en.y) < en.rayon + RAYON_JOUEUR) blesserJoueur(en.degats, 0.8);
             for (JoueurReseau joueur : joueursReseau) {
-                if (joueur.vie > 0 && Math.hypot(joueur.x - en.x, joueur.y - en.y)
+                if (joueur.vie > 0 && joueur.esquiveT <= 0 && Math.hypot(joueur.x - en.x, joueur.y - en.y)
                         < en.rayon + RAYON_JOUEUR) {
                     joueur.vie = Math.max(0, joueur.vie - en.degats * DT);
                 }
             }
         }
         if (pvie <= 0) {
-            terminer(false);
-            return false;
+            if (revivesRestants > 0) {
+                revivre();
+            } else {
+                terminer(false);
+                return false;
+            }
         }
         if (bossTue) {
-            terminer(true);
-            return false;
+            if (infini) {
+                bossVaincuInfini();
+            } else {
+                terminer(true);
+                return false;
+            }
         }
         return true;
+    }
+
+    /** Inflige des dégâts au joueur, sauf s'il est invulnérable (esquive, coup récent) ou protégé. */
+    boolean blesserJoueur(double degatsRecus, double invulnerabilite) {
+        if (invuln > 0 || tBouclier > 0) return false;
+        pvie -= degatsRecus;
+        invuln = invulnerabilite;
+        shake = 10;
+        degatsSubis = true;
+        audio.degat();
+        explosion(px, py, 12, new Color(255, 120, 160));
+        return true;
+    }
+
+    /** « Seconde chance » (amélioration permanente) : le joueur revient avec 40 % de vie. */
+    private void revivre() {
+        revivesRestants--;
+        pvie = pvieMax * 0.4;
+        invuln = 3;
+        novaX = px;
+        novaY = py;
+        novaT = 0.6;
+        shake = 14;
+        for (Ennemi en : ennemis) {
+            if (!en.boss && Math.hypot(en.x - px, en.y - py) < 420) blesser(en, degats * 6);
+        }
+        tirsEnnemis.clear();
+        zones.removeIf(z -> z.ennemie && !z.explosee);
+        explosion(px, py, 40, new Color(255, 230, 140));
+        audio.pouvoir();
+        annonce("Seconde chance !");
+    }
+
+    /** Mode Infini : le boss est vaincu mais la partie continue, avec un boss plus solide ensuite. */
+    private void bossVaincuInfini() {
+        bossTue = false;
+        bossNum++;
+        if (!victoireAcquise) {
+            victoireAcquise = true;
+            validerVictoire();
+        }
+        if (bossNum >= 3) prog.debloquer("infini");
+        prochainBoss = temps + 90;
+        tirsEnnemis.clear();
+        zones.removeIf(z -> z.ennemie);
+        pvie = Math.min(pvieMax, pvie + pvieMax * 0.3);
+        shake = 14;
+        annonce(nouveauMonde ? "Boss vaincu ! Monde suivant débloqué, on continue !"
+                : "Boss vaincu ! La partie continue...");
+    }
+
+    /** Esquive : petit bond rapide dans la direction du déplacement, invulnérable pendant l'action. */
+    public boolean activerEsquive() {
+        if (carte == null || esquiveRecharge > 0 || esquiveT > 0) return false;
+        double n = Math.hypot(dirX, dirY);
+        if (n < 1e-6) {
+            dirX = 1;
+            dirY = 0;
+            n = 1;
+        }
+        esquiveDx = dirX / n;
+        esquiveDy = dirY / n;
+        esquiveT = ESQUIVE_DUREE;
+        esquiveDepuis = 0;
+        esquiveRecharge = ESQUIVE_RECHARGE * (tTurbo > 0 ? 0.6 : 1.0);
+        invuln = Math.max(invuln, ESQUIVE_DUREE + 0.12);
+        esquivesRun++;
+        prog.totalEsquives++;
+        prog.verifierGlobal();
+        explosion(px, py, 8, Color.WHITE);
+        audio.esquive();
+        return true;
+    }
+
+    private void majTirsEnnemis() {
+        for (int i = tirsEnnemis.size() - 1; i >= 0; i--) {
+            TirEnnemi t = tirsEnnemis.get(i);
+            t.x += t.vx * DT;
+            t.y += t.vy * DT;
+            t.vie -= DT;
+            boolean retirer = t.vie <= 0 || t.x < -20 || t.x > carte.largeur + 20
+                    || t.y < -20 || t.y > carte.hauteur + 20 || carte.libre(t.x, t.y, 4);
+            if (!retirer && Math.hypot(px - t.x, py - t.y) < t.rayon + RAYON_JOUEUR * 0.75) {
+                if (tBouclier > 0) { // le bouclier absorbe le projectile
+                    retirer = true;
+                    explosion(t.x, t.y, 4, Color.WHITE);
+                } else if (invuln <= 0) { // pendant l'esquive, le projectile passe à travers
+                    blesserJoueur(t.degats, 0.7);
+                    retirer = true;
+                }
+            }
+            if (!retirer) {
+                for (JoueurReseau joueur : joueursReseau) {
+                    if (joueur.vie > 0 && joueur.esquiveT <= 0
+                            && Math.hypot(joueur.x - t.x, joueur.y - t.y) < t.rayon + RAYON_JOUEUR * 0.75) {
+                        joueur.vie = Math.max(0, joueur.vie - t.degats);
+                        retirer = true;
+                        break;
+                    }
+                }
+            }
+            if (retirer) tirsEnnemis.remove(i);
+        }
+    }
+
+    /** Zones à retardement : pilonnage du boss (blesse le joueur) et météores (blessent les ennemis). */
+    private void majZones() {
+        for (int i = zones.size() - 1; i >= 0; i--) {
+            ZoneDanger z = zones.get(i);
+            if (z.explosee) {
+                z.apres -= DT;
+                if (z.apres <= 0) zones.remove(i);
+                continue;
+            }
+            z.delai -= DT;
+            if (z.delai > 0) continue;
+            z.explosee = true;
+            z.apres = 0.3;
+            if (z.ennemie) {
+                if (Math.hypot(px - z.x, py - z.y) < z.rayon + RAYON_JOUEUR * 0.5) blesserJoueur(z.degats, 0.8);
+                for (JoueurReseau joueur : joueursReseau) {
+                    if (joueur.vie > 0 && joueur.esquiveT <= 0
+                            && Math.hypot(joueur.x - z.x, joueur.y - z.y) < z.rayon + RAYON_JOUEUR * 0.5) {
+                        joueur.vie = Math.max(0, joueur.vie - z.degats);
+                    }
+                }
+                shake = Math.max(shake, 6);
+                explosion(z.x, z.y, 14, new Color(255, 120, 90));
+            } else {
+                for (Ennemi c : ennemis) {
+                    if (Math.hypot(c.x - z.x, c.y - z.y) <= z.rayon + c.rayon * 0.5) blesser(c, z.degats);
+                }
+                explosion(z.x, z.y, z.evolue ? 22 : 14, new Color(255, 190, 90));
+                shake = Math.max(shake, 2);
+            }
+        }
+    }
+
+    /** Rayon de l'aura de sucre (arme secondaire), selon son niveau et son évolution. */
+    public double rayonAura() {
+        int i = ArmeSecondaire.AURA.ordinal();
+        return 62 + 13 * niveauArme[i] + (evolueeArme[i] ? 40 : 0);
     }
 
     private void majBonus() {
@@ -919,7 +1384,10 @@ public class Partie {
                 g.y += Math.sin(a) * v * DT;
             }
             if (d < 20) {
-                xp += g.valeur * (tXp > 0 ? 2 : 1);
+                xpReste += g.valeur * (tXp > 0 ? 2 : 1) * gainXp * modXp;
+                int gagne = (int) xpReste;
+                xp += gagne;
+                xpReste -= gagne;
                 gemmes.remove(i);
                 audio.bonbon();
             }
@@ -965,7 +1433,6 @@ public class Partie {
     // Ennemis
     // ------------------------------------------------------------------
     private void spawnEnnemi(TypeEnnemi type, boolean boss) {
-        Monde mo = monde;
         Ennemi e = new Ennemi();
         boolean place = false;
         // on le fait apparaître juste hors de l'écran, dans la carte et pas dans un obstacle
@@ -985,19 +1452,29 @@ public class Partie {
             e.x = px < carte.largeur / 2.0 ? carte.largeur - 100 : 100; // le boss arrive toujours
             e.y = py < carte.hauteur / 2.0 ? carte.hauteur - 100 : 100;
         }
+        initialiserEnnemi(e, type, boss);
+        ennemis.add(e);
+    }
+
+    /** Donne à un ennemi ses statistiques (vie, vitesse, dégâts) selon son type, le temps et la difficulté. */
+    private void initialiserEnnemi(Ennemi e, TypeEnnemi type, boolean boss) {
+        Monde mo = monde;
+        double diff = diff();
         e.type = type;
         e.monde = mo.id;
         e.boss = boss;
         e.sens = rnd.nextBoolean() ? 1 : -1;
         e.col = boss ? mo.bossCol : mo.palette[rnd.nextInt(mo.palette.length)];
-        double echelle = (1 + temps / 90.0) * mo.diff;     // plus costaud avec le temps et les mondes
-        double vit = 1 + (mo.diff - 1) * 0.25;
-        double dgt = 1 + (mo.diff - 1) * 0.5;
+        double echelle = (1 + temps / 90.0) * diff * modPv;   // plus costaud avec le temps et les mondes
+        double vit = (1 + (diff - 1) * 0.25) * modVitEnn;
+        double dgt = 1 + (diff - 1) * 0.5;
         if (boss) {
-            e.pvMax = mo.bossPv;
+            e.pvMax = mo.bossPv * (1 + 0.7 * bossNum) * (cauchemar ? 1.3 : 1.0);
             e.rayon = 48;
             e.vitesse = 55 * vit;
             e.degats = 25 * dgt;
+            e.cd = 2.5;
+            e.phase = 1;
         } else if (type == TypeEnnemi.MACARON) {
             e.pvMax = 20 * echelle;
             e.rayon = 16;
@@ -1008,6 +1485,17 @@ public class Partie {
             e.rayon = 22;
             e.vitesse = 35 * vit;
             e.degats = 15 * dgt;
+        } else if (type == TypeEnnemi.TIREUR) {
+            e.pvMax = 28 * echelle;
+            e.rayon = 14;
+            e.vitesse = 70 * vit;
+            e.degats = 6 * dgt;
+            e.cd = 1.2 + rnd.nextDouble();
+        } else if (type == TypeEnnemi.KAMIKAZE) {
+            e.pvMax = 14 * echelle;
+            e.rayon = 13;
+            e.vitesse = 125 * vit;
+            e.degats = 5 * dgt;
         } else {
             e.pvMax = 10 * echelle;
             e.rayon = 11;
@@ -1015,7 +1503,6 @@ public class Partie {
             e.degats = 8 * dgt;
         }
         e.pv = e.pvMax;
-        ennemis.add(e);
     }
 
     /** Commandes temporaires de la console de développement. */
@@ -1026,6 +1513,27 @@ public class Partie {
         TypeEnnemi typeEnnemi = TypeEnnemi.depuisId(type);
         for (int i = 0; i < total; i++) spawnEnnemi(typeEnnemi, boss);
         return ennemis.size() - avant;
+    }
+
+    /** Console : donne un niveau à une arme secondaire (0 aura, 1 météores, 2 éclairs). */
+    public void debugArme(int arme, int niveau) {
+        if (arme < 0 || arme >= niveauArme.length) return;
+        niveauArme[arme] = Math.clamp(niveau, 0, ArmeSecondaire.NIV_MAX);
+        minuteurArme[arme] = 0.3;
+    }
+
+    /** Console : remplit les conditions d'évolution (elles seront proposées au prochain niveau). */
+    public void debugEvolutions() {
+        for (ArmeSecondaire a : ArmeSecondaire.values()) {
+            niveauArme[a.ordinal()] = ArmeSecondaire.NIV_MAX;
+            ameliosPrises.put(a.ameliorationRequise, a.nbRequis);
+        }
+        ameliosPrises.put("Corne puissante", 2);
+        etoiles = Math.max(etoiles, 6);
+    }
+
+    public boolean debugElite() {
+        return carte != null && spawnElite();
     }
 
     public void debugTuerTous() {
@@ -1053,7 +1561,7 @@ public class Partie {
         }
     }
 
-    private Ennemi plusProche(double distMax) {
+    Ennemi plusProche(double distMax) {
         return plusProche(px, py, distMax);
     }
 
@@ -1071,7 +1579,6 @@ public class Partie {
     }
 
     private void tirerDepuis(double x, double y, Personnage personnageTireur, Ennemi cible) {
-        Profil pf = profil(personnageTireur);
         double a = Math.atan2(cible.y - y, cible.x - x);
         Tir t = new Tir();
         t.x = x;
@@ -1086,8 +1593,8 @@ public class Partie {
         };
         t.vx = Math.cos(a) * vitesseTir;
         t.vy = Math.sin(a) * vitesseTir;
-        t.degats = degats * pf.degats;
-        t.perfo = perforation + pf.perfo;
+        t.degats = degats * (personnageTireur.typeArme == TypeArme.EPEE ? 1.8 : 1);
+        t.perfo = personnageTireur.typeArme == TypeArme.BOOMERANG ? 2 : 0;
         t.vie = personnageTireur.typeArme == TypeArme.BOMBE ? 1.8 : 1.4;
         t.arme = personnageTireur.typeArme;
         if (personnageTireur.typeArme == TypeArme.BOMBE) t.rayonExplosion = rayonExplosion;
@@ -1236,7 +1743,7 @@ public class Partie {
         return true;
     }
 
-    private void blesser(Ennemi e, double d) {
+    void blesser(Ennemi e, double d) {
         e.pv -= d;
         e.flash = 0.08;
     }
@@ -1246,23 +1753,35 @@ public class Partie {
         prog.totalKills++;
         audio.mort();
         explosion(e.x, e.y, e.boss ? 80 : 10, e.col);
-        int nb = e.boss ? 20 : 1;
+        int nb = e.boss ? 20 : (e.elite ? 6 : 1);
         for (int i = 0; i < nb; i++) {
             Gemme g = new Gemme();
-            g.x = e.x + (e.boss ? rnd.nextGaussian() * 30 : 0);
-            g.y = e.y + (e.boss ? rnd.nextGaussian() * 30 : 0);
-            g.valeur = e.boss ? 3 : (e.type == TypeEnnemi.GUIMAUVE ? 2 : 1);
+            g.x = e.x + (e.boss || e.elite ? rnd.nextGaussian() * 30 : 0);
+            g.y = e.y + (e.boss || e.elite ? rnd.nextGaussian() * 30 : 0);
+            g.valeur = e.boss ? 3 : (e.elite || e.type == TypeEnnemi.GUIMAUVE || e.type == TypeEnnemi.TIREUR ? 2 : 1);
             gemmes.add(g);
         }
         if (e.boss) {
             bossTue = true;
+            tirsEnnemis.clear();
+            zones.removeIf(z -> z.ennemie);
+            return;
+        }
+        if (e.elite && bonus.size() < 8) { // une élite lâche toujours un pouvoir
+            Bonus b = new Bonus();
+            b.x = Math.clamp(e.x, 30, carte.largeur - 30);
+            b.y = Math.clamp(e.y, 30, carte.hauteur - 30);
+            b.type = tirerPouvoir();
+            b.vie = 18;
+            bonus.add(b);
+            shake = Math.max(shake, 5);
             return;
         }
         // chance de lâcher un pouvoir : les guimauves (costaudes) en lâchent plus, les gommes moins
         double mult = e.type == TypeEnnemi.GUIMAUVE ? 2.0
                 : e.type == TypeEnnemi.GOMME ? 0.6 : 1.0;
         if (bossApparu) mult *= 1.5; // pendant le combat de boss, ça tombe plus souvent
-        if (bonus.size() < 5 && rnd.nextDouble() < Constantes.TAUX_DROP * mult * chanceBonus) {
+        if (bonus.size() < 5 && rnd.nextDouble() < Constantes.TAUX_DROP * mult * chanceBonus * modDrop) {
             Bonus b = new Bonus();
             b.x = Math.clamp(e.x, 30, carte.largeur - 30);
             b.y = Math.clamp(e.y, 30, carte.hauteur - 30);
@@ -1390,8 +1909,74 @@ public class Partie {
             default:
                 break;
         }
+        ajouterArmesSecondaires(tous);
         Collections.shuffle(tous, rnd);
-        return new ArrayList<>(tous.subList(0, 3));
+        List<Amelio> resultat = new ArrayList<>(tous.subList(0, 3));
+        // une évolution disponible est toujours proposée (elle remplace la première carte)
+        List<Amelio> evolutions = evolutionsDisponibles();
+        if (!evolutions.isEmpty()) resultat.set(0, evolutions.get(rnd.nextInt(evolutions.size())));
+        return resultat;
+    }
+
+    private int compte(String cle) {
+        return ameliosPrises.getOrDefault(cle, 0);
+    }
+
+    /** Nouvelles armes secondaires (niveau 0) ou niveau supérieur de celles qu'on possède déjà. */
+    private void ajouterArmesSecondaires(List<Amelio> tous) {
+        for (ArmeSecondaire a : ArmeSecondaire.values()) {
+            final int i = a.ordinal();
+            int niv = niveauArme[i];
+            if (niv >= ArmeSecondaire.NIV_MAX) continue;
+            String desc = niv == 0 ? "NOUVELLE ARME\n" + a.desc
+                    : "Niveau " + (niv + 1) + " / " + ArmeSecondaire.NIV_MAX + "\n+ dégâts et + de puissance";
+            tous.add(new Amelio(a.nom, desc, a.couleur, () -> {
+                niveauArme[i]++;
+                if (niveauArme[i] == 1) minuteurArme[i] = 0.4;
+            }, "arme:" + a.name(), false));
+        }
+    }
+
+    /** Évolutions possibles : arme au niveau max + la bonne amélioration prise assez de fois. */
+    private List<Amelio> evolutionsDisponibles() {
+        List<Amelio> liste = new ArrayList<>();
+        Color or = new Color(255, 215, 90);
+        for (ArmeSecondaire a : ArmeSecondaire.values()) {
+            final int i = a.ordinal();
+            if (niveauArme[i] < ArmeSecondaire.NIV_MAX || evolueeArme[i]) continue;
+            if (compte(a.ameliorationRequise) < a.nbRequis) continue;
+            liste.add(new Amelio(a.nomEvo, "ÉVOLUTION\n" + a.descEvo, or, () -> {
+                evolueeArme[i] = true;
+                evolutionTerminee(a.nomEvo);
+            }, "evo:" + a.name(), true));
+        }
+        if (!constellation && etoiles >= 6 && compte("Corne puissante") >= 2) {
+            liste.add(new Amelio("Constellation", "ÉVOLUTION\n+2 étoiles, orbite large,\ndégâts x2", or, () -> {
+                constellation = true;
+                etoiles += 2;
+                rayonOrbite = 108;
+                multOrbite = 2.2;
+                evolutionTerminee("Constellation");
+            }, "evo:CONSTELLATION", true));
+        }
+        return liste;
+    }
+
+    private void evolutionTerminee(String nom) {
+        evolutionsRun++;
+        prog.debloquer("evolution");
+        shake = 12;
+        explosion(px, py, 40, new Color(255, 225, 120));
+        annonce("ÉVOLUTION : " + nom + " !");
+    }
+
+    /** Relance les trois choix de niveau (nombre limité par partie, augmenté par la boutique). */
+    public boolean relancer() {
+        if (choix.isEmpty() || relances <= 0) return false;
+        relances--;
+        choix = tirerChoix();
+        audio.clic();
+        return true;
     }
 
     private void niveauSup() {
@@ -1412,7 +1997,9 @@ public class Partie {
     /** Applique l'amélioration choisie. Si plusieurs niveaux d'un coup, un nouveau choix sera proposé. */
     public void appliquerChoix(int i) {
         if (i < 0 || i >= choix.size()) return;
-        choix.get(i).effet.run();
+        Amelio a = choix.get(i);
+        a.effet.run();
+        ameliosPrises.merge(a.cle, 1, Integer::sum);
         choix = new ArrayList<>();
         audio.clic();
         if (xpSuivant > 0 && xp >= xpSuivant) niveauSup();

@@ -55,21 +55,21 @@ public final class Obstacles {
     // Monde 1 : Prairie Cupcake - bonbons pastel
     // ==================================================================
     private static void prairie(Graphics2D g, Obstacle o, double anim) {
-        double u = o.echelle;
+        double rr = o.echelle;
         Color[] pal = Monde.TOUS[0].palette;
         int i1 = (int) (o.graine * 100) % pal.length;
         Color c1 = pal[i1], c2 = pal[(i1 + 2) % pal.length];
         switch (o.type) {
             case 0: { // cupcake géant
-                ombre(g, 0, 0.05 * u, 1.15 * u, 0.38 * u);
+                ombre(g, 0, 0.05 * rr, 1.15 * rr, 0.38 * rr);
                 Color papier = melange(c1, Color.WHITE, 0.3);
-                double[] godet = {-0.8 * u, 0, 0.8 * u, 0, u, -1.0 * u, -1.0 * u, -1.0 * u};
+                double[] godet = {-0.8 * rr, 0, 0.8 * rr, 0, rr, -1.0 * rr, -1.0 * rr, -1.0 * rr};
                 g.setColor(papier);
                 poly(g, godet);
                 g.setColor(alpha(Color.WHITE, 130));
-                g.setStroke(new BasicStroke((float) (u * 0.07)));
+                g.setStroke(new BasicStroke((float) (rr * 0.07)));
                 for (int k = -2; k <= 2; k++) {
-                    g.draw(new Line2D.Double(k / 3.0 * 0.8 * u, -0.04 * u, k / 3.0 * 1.0 * u, -0.96 * u));
+                    g.draw(new Line2D.Double(k / 3.0 * 0.8 * rr, -0.04 * rr, k / 3.0 * 1.0 * rr, -0.96 * rr));
                 }
                 g.setStroke(new BasicStroke(2));
                 g.setColor(melange(papier, Color.BLACK, 0.25));
@@ -78,35 +78,35 @@ public final class Obstacles {
                 double[][] couches = {{1.05, -1.55, 0.95}, {0.82, -2.0, 0.8}, {0.55, -2.4, 0.7}};
                 for (double[] c : couches) {
                     g.setColor(glace);
-                    ov(g, 0, (c[1] + c[2] / 2) * u, c[0] * u, c[2] * u / 2);
+                    ov(g, 0, (c[1] + c[2] / 2) * rr, c[0] * rr, c[2] * rr / 2);
                     g.setColor(melange(glace, Color.BLACK, 0.18));
-                    ovContour(g, 0, (c[1] + c[2] / 2) * u, c[0] * u, c[2] * u / 2);
+                    ovContour(g, 0, (c[1] + c[2] / 2) * rr, c[0] * rr, c[2] * rr / 2);
                     g.setColor(alpha(Color.WHITE, 150));
-                    ov(g, -c[0] * u * 0.4, (c[1] + c[2] * 0.3) * u, c[0] * u * 0.25, c[2] * u * 0.1);
+                    ov(g, -c[0] * rr * 0.4, (c[1] + c[2] * 0.3) * rr, c[0] * rr * 0.25, c[2] * rr * 0.1);
                 }
                 for (int k = 0; k < 7; k++) { // vermicelles sur la glace
-                    double x = (h(o.graine, k) - 0.5) * 1.3 * u, y = (-1.95 + h(o.graine, k + 20) * 0.6) * u;
+                    double x = (h(o.graine, k) - 0.5) * 1.3 * rr, y = (-1.95 + h(o.graine, k + 20) * 0.6) * rr;
                     g.setColor(pal[k % pal.length]);
-                    g.setStroke(new BasicStroke((float) (u * 0.07), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g.setStroke(new BasicStroke((float) (rr * 0.07), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     double a = h(o.graine, k + 40) * 3.14;
-                    g.draw(new Line2D.Double(x, y, x + Math.cos(a) * 0.14 * u, y + Math.sin(a) * 0.07 * u));
+                    g.draw(new Line2D.Double(x, y, x + Math.cos(a) * 0.14 * rr, y + Math.sin(a) * 0.07 * rr));
                 }
                 g.setColor(new Color(226, 48, 86));
-                ov(g, 0, -2.5 * u, 0.22 * u, 0.22 * u);
+                ov(g, 0, -2.5 * rr, 0.22 * rr, 0.22 * rr);
                 g.setColor(alpha(Color.WHITE, 190));
-                ov(g, -0.07 * u, -2.58 * u, 0.06 * u, 0.05 * u);
+                ov(g, -0.07 * rr, -2.58 * rr, 0.06 * rr, 0.05 * rr);
                 break;
             }
             case 1: { // sucette-arbre
-                ombre(g, 0, 0, 0.6 * u, 0.2 * u);
+                ombre(g, 0, 0, 0.6 * rr, 0.2 * rr);
                 g.setColor(new Color(255, 246, 250));
-                g.fill(new Rectangle2D.Double(-0.11 * u, -2.5 * u, 0.22 * u, 2.5 * u));
+                g.fill(new Rectangle2D.Double(-0.11 * rr, -2.5 * rr, 0.22 * rr, 2.5 * rr));
                 g.setColor(c1);
-                g.setStroke(new BasicStroke((float) (u * 0.08)));
+                g.setStroke(new BasicStroke((float) (rr * 0.08)));
                 for (int k = 0; k < 9; k++) {
-                    g.draw(new Line2D.Double(-0.11 * u, -k * 0.28 * u, 0.11 * u, -k * 0.28 * u - 0.14 * u));
+                    g.draw(new Line2D.Double(-0.11 * rr, -k * 0.28 * rr, 0.11 * rr, -k * 0.28 * rr - 0.14 * rr));
                 }
-                double hy = -3.0 * u, rr = u;
+                double hy = -3.0 * rr;
                 for (int k = 6; k >= 1; k--) {
                     g.setColor(k % 2 == 0 ? Color.WHITE : melange(c1, Color.WHITE, k == 5 ? 0.0 : 0.1));
                     ov(g, 0, hy, rr * k / 6, rr * k / 6 * 0.97);
@@ -119,20 +119,20 @@ public final class Obstacles {
                 break;
             }
             case 2: { // cristaux de sucre candi
-                ombre(g, 0, 0.05 * u, 1.15 * u, 0.4 * u);
+                ombre(g, 0, 0.05 * rr, 1.15 * rr, 0.4 * rr);
                 g.setColor(melange(c1, Color.WHITE, 0.45));
-                ov(g, 0, -0.35 * u, u, 0.42 * u);
+                ov(g, 0, -0.35 * rr, rr, 0.42 * rr);
                 for (int k = 0; k < 5; k++) {
-                    double x = (k - 2) * 0.4 * u + (h(o.graine, k) - 0.5) * 0.16 * u;
-                    double hh = (1.0 + h(o.graine, k + 9) * 1.1 - Math.abs(k - 2) * 0.22) * u;
-                    double base = -0.3 * u + Math.abs(k - 2) * 0.05 * u;
+                    double x = (k - 2) * 0.4 * rr + (h(o.graine, k) - 0.5) * 0.16 * rr;
+                    double hh = (1.0 + h(o.graine, k + 9) * 1.1 - Math.abs(k - 2) * 0.22) * rr;
+                    double base = -0.3 * rr + Math.abs(k - 2) * 0.05 * rr;
                     Color cc = pal[(i1 + k) % pal.length];
-                    double[] cris = {x - 0.22 * u, base, x - 0.16 * u, base - hh, x, base - hh - 0.26 * u,
-                            x + 0.16 * u, base - hh, x + 0.22 * u, base};
+                    double[] cris = {x - 0.22 * rr, base, x - 0.16 * rr, base - hh, x, base - hh - 0.26 * rr,
+                            x + 0.16 * rr, base - hh, x + 0.22 * rr, base};
                     g.setColor(alpha(melange(cc, Color.WHITE, 0.25), 225));
                     poly(g, cris);
                     g.setColor(alpha(Color.WHITE, 120));
-                    poly(g, x - 0.22 * u, base, x - 0.16 * u, base - hh, x, base - hh - 0.26 * u, x - 0.02 * u, base);
+                    poly(g, x - 0.22 * rr, base, x - 0.16 * rr, base - hh, x, base - hh - 0.26 * rr, x - 0.02 * rr, base);
                     g.setColor(alpha(Color.WHITE, 200));
                     g.setStroke(new BasicStroke(1.6f));
                     contour(g, cris);
@@ -140,25 +140,25 @@ public final class Obstacles {
                 break;
             }
             default: { // arbre à barbe à papa
-                ombre(g, 0, 0, 0.9 * u, 0.3 * u);
+                ombre(g, 0, 0, 0.9 * rr, 0.3 * rr);
                 g.setColor(new Color(255, 236, 226));
-                g.fill(new RoundRectangle2D.Double(-0.17 * u, -1.6 * u, 0.34 * u, 1.6 * u, 0.12 * u, 0.12 * u));
+                g.fill(new RoundRectangle2D.Double(-0.17 * rr, -1.6 * rr, 0.34 * rr, 1.6 * rr, 0.12 * rr, 0.12 * rr));
                 g.setColor(alpha(c1, 140));
-                g.setStroke(new BasicStroke((float) (u * 0.06)));
+                g.setStroke(new BasicStroke((float) (rr * 0.06)));
                 for (int k = 0; k < 5; k++) {
-                    g.draw(new Line2D.Double(-0.17 * u, -k * 0.32 * u, 0.17 * u, -k * 0.32 * u - 0.12 * u));
+                    g.draw(new Line2D.Double(-0.17 * rr, -k * 0.32 * rr, 0.17 * rr, -k * 0.32 * rr - 0.12 * rr));
                 }
                 Color nuage = o.graine < 0.5 ? new Color(255, 184, 216) : new Color(176, 208, 255);
                 double[][] bouffees = {{-0.7, -2.3, 0.7}, {0.7, -2.3, 0.7}, {0, -3.0, 0.85}, {-0.45, -2.8, 0.7},
                         {0.45, -2.8, 0.7}, {0, -2.2, 0.8}};
                 for (double[] b : bouffees) {
                     g.setColor(nuage);
-                    ov(g, b[0] * u, b[1] * u, b[2] * u, b[2] * u * 0.9);
+                    ov(g, b[0] * rr, b[1] * rr, b[2] * rr, b[2] * rr * 0.9);
                 }
                 g.setColor(alpha(Color.WHITE, 130));
-                for (double[] b : bouffees) ov(g, (b[0] - 0.2) * u, (b[1] - 0.25) * u, b[2] * u * 0.35, b[2] * u * 0.25);
+                for (double[] b : bouffees) ov(g, (b[0] - 0.2) * rr, (b[1] - 0.25) * rr, b[2] * rr * 0.35, b[2] * rr * 0.25);
                 g.setColor(alpha(melange(nuage, Color.BLACK, 0.2), 90));
-                ov(g, 0.35 * u, -2.0 * u, 0.7 * u, 0.3 * u);
+                ov(g, 0.35 * rr, -2.0 * rr, 0.7 * rr, 0.3 * rr);
                 break;
             }
         }

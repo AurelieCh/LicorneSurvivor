@@ -133,6 +133,7 @@ public class RenduMonde {
         for (Obstacle o : c.obstacles) { // zones plates : étangs, lave
             if (o.plat && o.x > x0 - 100 && o.x < x1 + 100 && o.y > y0 - 100 && o.y < y1 + 100) CacheRendu.obstacle(g, o, anim);
         }
+        EffetsCombat.sol(g, p, anim);
         double echelleRendu = CacheRendu.echelle();
         int maxGemmesDessinees = Math.max(120, (int) (MAX_GEMMES_DESSINEES
                 / Math.max(1, echelleRendu * echelleRendu)));
@@ -207,8 +208,10 @@ public class RenduMonde {
         g.setColor(ETOILE);
         for (int i = 0; i < p.etoiles; i++) {
             double a = p.angleOrbite + i * 2 * Math.PI / p.etoiles;
-            etoile(g, p.px + Math.cos(a) * 75, p.py + Math.sin(a) * 75, 13, 6, anim * 3);
+            etoile(g, p.px + Math.cos(a) * p.rayonOrbite, p.py + Math.sin(a) * p.rayonOrbite,
+                    p.constellation ? 15 : 13, p.constellation ? 7 : 6, anim * 3);
         }
+        EffetsCombat.air(g, p, anim);
 
         if (p.novaT > 0) { // onde de la nova sucrée
             double prog = 1 - p.novaT / 0.6;
@@ -232,21 +235,10 @@ public class RenduMonde {
 
     private static void dessinerJoueurReseau(Graphics2D g, Partie.JoueurReseau joueur, double anim) {
         AffineTransform ancien = g.getTransform();
-        g.setColor(new Color(0, 0, 0, 45));
-        ov(g, joueur.x, joueur.y + 17, 17, 6);
         g.translate(joueur.x, joueur.y);
         g.scale(0.78, 0.78);
-        Sprites.personnage(g, 0, 0, joueur.personnage.id, anim + joueur.attaqueT * 8);
+        Sprites.personnage(g, 0, 0, joueur.personnage.id, anim);
         g.setTransform(ancien);
-        if (joueur.attaqueT > 0) {
-            double progression = 1 - joueur.attaqueT / 0.6;
-            int rayon = 24 + (int) (18 * progression);
-            int alpha = (int) (150 * Math.clamp(1 - progression, 0, 1));
-            g.setColor(new Color(255, 235, 120, alpha));
-            g.setStroke(new BasicStroke(3));
-            g.drawOval((int) joueur.x - rayon, (int) joueur.y - rayon,
-                    rayon * 2, rayon * 2);
-        }
         g.setColor(new Color(255, 255, 255, 220));
         g.fillRoundRect((int) joueur.x - 18, (int) joueur.y - 30, 36, 4, 4, 4);
         g.setColor(new Color(120, 220, 170));
@@ -344,8 +336,13 @@ public class RenduMonde {
             g.setColor(new Color(255, 255, 255, 60));
             g.fillOval((int) p.px - 40, (int) p.py - 44, 80, 88);
         }
-        // la licorne clignote quand elle est touchée
-        if (!(p.invuln > 0 && ((int) (p.invuln * 20)) % 2 == 0)) {
+        if (p.esquiveDepuis < 0.32) { // pendant l'esquive : translucide, sans clignotement
+            java.awt.Composite ancien = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+            Sprites.personnage(g, (int) p.px, (int) p.py, p.personnage.id, anim);
+            g.setComposite(ancien);
+        } else if (!(p.invuln > 0 && ((int) (p.invuln * 20)) % 2 == 0)) {
+            // la licorne clignote quand elle est touchée
             Sprites.personnage(g, (int) p.px, (int) p.py, p.personnage.id, anim);
         }
     }

@@ -14,6 +14,33 @@ public final class Zones {
         return new Rectangle(W / 2 - 125 + (i - 1) * 280, 190, 250, 280);
     }
 
+    // relance du choix de niveau
+    public static Rectangle btnRelancer() {
+        return new Rectangle(W / 2 - 130, 495, 260, 44);
+    }
+
+    // boutons ajoutés au menu principal
+    public static Rectangle boutonMode() {
+        return new Rectangle(22, 78, 150, 36);
+    }
+
+    public static Rectangle boutonBoutique() {
+        return new Rectangle(22, 122, 150, 36);
+    }
+
+    public static Rectangle boutonDefi() {
+        return new Rectangle(W - 170, 122, 140, 36);
+    }
+
+    // boutique complète
+    public static Rectangle ligneBoutiquePlus(int i) {
+        return new Rectangle(W / 2 - 330, 125 + i * 42, 660, 38);
+    }
+
+    public static Rectangle boutonBoutiqueRetour() {
+        return new Rectangle(W / 2 - 100, 530, 200, 46);
+    }
+
     // menu pause
     public static Rectangle btnReprendre() {
         return new Rectangle(W / 2 - 140, 215, 280, 54);

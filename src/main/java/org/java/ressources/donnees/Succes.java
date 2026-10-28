@@ -32,5 +32,10 @@ public class Succes {
             new Succes("armeEpee", "Lame en main", "Jouer une partie avec Lame", 25),
             new Succes("armeBombe", "Pluie de guimauves", "Jouer une partie avec Boum", 25),
             new Succes("armeRayon", "Lumière concentrée", "Jouer une partie avec Prisme", 35),
+            new Succes("evolution", "Métamorphose", "Faire évoluer une arme", 60),
+            new Succes("danse", "Danseuse étoile", "Faire 100 esquives (au total)", 40),
+            new Succes("cauchemar", "Cauchemar sucré", "Gagner en mode Cauchemar", 150),
+            new Succes("defi", "Défi relevé", "Terminer un défi du jour", 80),
+            new Succes("infini", "Sans fin", "Vaincre 3 boss en mode Infini", 120),
     };
 }

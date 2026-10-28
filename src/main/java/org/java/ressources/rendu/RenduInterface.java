@@ -1,13 +1,6 @@
 package org.java.ressources.rendu;
 
-import org.java.ressources.donnees.Amelio;
-import org.java.ressources.donnees.Constantes;
-import org.java.ressources.donnees.Monde;
-import org.java.ressources.donnees.Pouvoir;
-import org.java.ressources.donnees.Personnage;
-import org.java.ressources.donnees.Progression;
-import org.java.ressources.donnees.Reglages;
-import org.java.ressources.donnees.Succes;
+import org.java.ressources.donnees.*;
 import org.java.ressources.entites.Bonus;
 import org.java.ressources.entites.Ennemi;
 import org.java.ressources.entites.Obstacle;
@@ -16,34 +9,19 @@ import org.java.ressources.jeu.Partie;
 import org.java.ressources.jeu.Session;
 import org.java.ressources.reseau.ReseauLan;
 
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.FontMetrics;
-import java.awt.GradientPaint;
-import java.awt.Graphics2D;
-import java.awt.Rectangle;
+import java.awt.*;
 import java.awt.geom.AffineTransform;
-import java.util.Random;
 import java.util.Deque;
+import java.util.Random;
 
-import static org.java.ressources.donnees.Constantes.H;
-import static org.java.ressources.donnees.Constantes.NB_PARAMS;
-import static org.java.ressources.donnees.Constantes.W;
-import static org.java.ressources.rendu.Dessin.F_GRAND;
-import static org.java.ressources.rendu.Dessin.F_MINI;
-import static org.java.ressources.rendu.Dessin.F_MOYEN;
-import static org.java.ressources.rendu.Dessin.F_PETIT;
-import static org.java.ressources.rendu.Dessin.F_TITRE;
-import static org.java.ressources.rendu.Dessin.SOMBRE;
-import static org.java.ressources.rendu.Dessin.bouton;
-import static org.java.ressources.rendu.Dessin.chrono;
-import static org.java.ressources.rendu.Dessin.etoile;
-import static org.java.ressources.rendu.Dessin.plaque;
-import static org.java.ressources.rendu.Dessin.texteCentre;
+import static org.java.ressources.donnees.Constantes.*;
+import static org.java.ressources.rendu.Dessin.*;
 
 /** Tous les écrans « interface » : HUD, menus, pause, paramètres, succès, fin de partie. */
 public class RenduInterface {
     private static final int MINI_W = 180, MINI_H = 120;
+    private static final java.awt.Font F_NOM_SUCCES = F_MOYEN.deriveFont(15f);
+    private static final java.awt.Font F_DESC_SUCCES = F_PETIT.deriveFont(12.5f);
 
     private final double[][] etincelles = new double[70][3];
     /** Décor des côtés du menu principal, par monde : {type, x, y, u}. */
@@ -188,6 +166,48 @@ public class RenduInterface {
         competence += p.competenceTimer > 0 ? Math.ceil(p.competenceTimer) + "s" : "PRÊTE";
         g.drawString(competence, W - 280, 75);
 
+        // esquive
+        plaque(g, W - 292, 90, 278, 26);
+        g.setFont(F_MINI);
+        g.setColor(SOMBRE);
+        g.drawString("Esquive [Espace]  " + (p.esquiveRecharge > 0
+                ? String.format(java.util.Locale.ROOT, "%.1fs", p.esquiveRecharge) : "PRÊTE"), W - 280, 107);
+        g.setColor(p.esquiveRecharge > 0 ? new Color(190, 150, 255) : new Color(120, 220, 170));
+        g.fillRect(W - 280, 111, (int) (254 * (1 - Math.min(1, p.esquiveRecharge / Partie.ESQUIVE_RECHARGE))), 3);
+
+        // mode de jeu
+        String etiquette = p.defiJour ? "DÉFI : " + Partie.MODIFICATEURS[Math.max(0, p.modificateurDefi)]
+                : p.cauchemar ? "CAUCHEMAR" : p.infini ? "INFINI  -  boss vaincus : " + p.bossNum : null;
+        if (etiquette != null) {
+            g.setFont(F_MINI);
+            int w = g.getFontMetrics().stringWidth(etiquette) + 28;
+            plaque(g, W / 2 - w / 2, 14, w, 24);
+            g.setColor(p.cauchemar ? new Color(190, 40, 90) : SOMBRE);
+            texteCentre(g, etiquette, W / 2, 31);
+        }
+
+        // armes secondaires (en bas à gauche)
+        int wy = H - 36;
+        for (ArmeSecondaire a : ArmeSecondaire.values()) {
+            int niv = p.niveauArme[a.ordinal()];
+            if (niv <= 0) continue;
+            boolean evo = p.evolueeArme[a.ordinal()];
+            wy = ligneArme(g, wy, evo ? new Color(255, 205, 70) : a.couleur,
+                    evo ? a.nomEvo + "  (évolution)" : a.nom + "  niv " + niv);
+        }
+        if (p.constellation) wy = ligneArme(g, wy, new Color(255, 205, 70), "Constellation  (évolution)");
+
+        // bandeau d'annonce (phase du boss, élite, évolution...)
+        if (p.annonceT > 0 && s.etat == org.java.ressources.jeu.Etat.JEU) {
+            g.setFont(F_MOYEN);
+            int w = g.getFontMetrics().stringWidth(p.annonce) + 50;
+            int a = (int) (255 * Math.min(1, p.annonceT * 2));
+            g.setColor(new Color(80, 50, 110, Math.min(215, a)));
+            g.fillRoundRect(W / 2 - w / 2, 170, w, 38, 26, 26);
+            g.setColor(new Color(255, 255, 255, a));
+            texteCentre(g, p.annonce, W / 2, 196);
+        }
+
         // alerte boss
         if (s.etat == org.java.ressources.jeu.Etat.JEU && !p.bossApparu && p.temps >= mo.dureeBoss - 15) {
             g.setFont(F_GRAND);
@@ -231,6 +251,17 @@ public class RenduInterface {
             g.drawOval(mx - 10, my - 10, 20, 20);
             g.fillOval(mx - 2, my - 2, 4, 4);
         }
+    }
+
+    /** Une ligne « arme secondaire » du HUD ; renvoie la position de la ligne suivante (vers le haut). */
+    private int ligneArme(Graphics2D g, int y, Color c, String texte) {
+        plaque(g, 14, y, 230, 24);
+        g.setColor(c);
+        g.fillOval(22, y + 6, 12, 12);
+        g.setFont(F_MINI);
+        g.setColor(SOMBRE);
+        g.drawString(texte, 42, y + 17);
+        return y - 28;
     }
 
     public void console(Graphics2D g, String texte, Deque<String> lignes) {
@@ -312,9 +343,14 @@ public class RenduInterface {
             Rectangle r = Zones.carte(i);
             g.setColor(a.col);
             g.fillRoundRect(r.x, r.y, r.width, r.height, 30, 30);
-            g.setColor(Color.WHITE);
-            g.setStroke(new BasicStroke(4));
+            g.setColor(a.evolution ? new Color(255, 190, 40) : Color.WHITE);
+            g.setStroke(new BasicStroke(a.evolution ? 8 : 4));
             g.drawRoundRect(r.x, r.y, r.width, r.height, 30, 30);
+            if (a.evolution) { // étoiles dorées aux coins
+                g.setColor(new Color(255, 245, 190));
+                etoile(g, r.x + 26, r.y + 26, 13, 6, s.anim * 2);
+                etoile(g, r.x + r.width - 26, r.y + 26, 13, 6, -s.anim * 2);
+            }
             g.setColor(SOMBRE);
             g.setFont(F_TITRE);
             texteCentre(g, String.valueOf(i + 1), r.x + r.width / 2, r.y + 70);
@@ -327,6 +363,9 @@ public class RenduInterface {
                 ly += 24;
             }
         }
+        boolean peut = p.relances > 0;
+        bouton(g, Zones.btnRelancer(), "Relancer (R) : " + p.relances,
+                peut ? new Color(190, 150, 240) : new Color(150, 140, 175));
     }
 
     public void pause(Graphics2D g, Session s) {
@@ -376,6 +415,21 @@ public class RenduInterface {
             g.setColor(new Color(160, 255, 200));
             texteCentre(g, "Nouveau monde débloqué : " + Monde.TOUS[s.prog.mondeMax].nom + " !", W / 2, 395);
         }
+        g.setFont(F_PETIT);
+        g.setColor(new Color(255, 235, 200));
+        if (p.defiJour) {
+            texteCentre(g, "Défi du jour (" + Partie.MODIFICATEURS[Math.max(0, p.modificateurDefi)]
+                    + ") : record " + s.prog.defiScore, W / 2, 365);
+        } else if (p.infini) {
+            texteCentre(g, "Mode Infini : " + p.bossNum + " boss vaincu(s)", W / 2, 365);
+        } else if (p.cauchemar) {
+            texteCentre(g, "Mode Cauchemar : sucre x1,5", W / 2, 365);
+        }
+        if (p.evolutionsRun > 0) {
+            texteCentre(g, "Évolutions obtenues : " + p.evolutionsRun + "     Esquives : " + p.esquivesRun, W / 2, 430);
+        } else {
+            texteCentre(g, "Esquives : " + p.esquivesRun, W / 2, 430);
+        }
         g.setColor(Color.WHITE);
         g.setFont(F_MOYEN);
         texteCentre(g, "ESPACE : boutique et nouvelle partie", W / 2, 470);
@@ -413,22 +467,23 @@ public class RenduInterface {
         for (int i = 0; i < Succes.TOUS.length; i++) {
             Succes su = Succes.TOUS[i];
             boolean ok = pr.succesOk.contains(su.id);
-            int x = 30 + (i % 2) * 460, y = 105 + (i / 2) * 56;
+            int x = 14 + (i % 3) * 316, y = 98 + (i / 3) * 58, w = 304;
             g.setColor(ok ? new Color(255, 248, 215) : new Color(255, 255, 255, 110));
-            g.fillRoundRect(x, y, 440, 50, 22, 22);
+            g.fillRoundRect(x, y, w, 52, 22, 22);
             g.setColor(ok ? new Color(255, 190, 60) : new Color(190, 180, 210));
             g.setStroke(new BasicStroke(3));
-            g.drawRoundRect(x, y, 440, 50, 22, 22);
+            g.drawRoundRect(x, y, w, 52, 22, 22);
             g.setColor(ok ? new Color(255, 200, 60) : new Color(200, 190, 220));
-            etoile(g, x + 28, y + 25, 16, 7, ok ? s.anim * 2 : 0);
+            etoile(g, x + 26, y + 26, 15, 6.5, ok ? s.anim * 2 : 0);
             g.setColor(ok ? SOMBRE : new Color(140, 125, 165));
-            g.setFont(F_MOYEN);
-            g.drawString(su.nom, x + 56, y + 21);
-            g.setFont(F_PETIT);
-            g.drawString(su.desc, x + 56, y + 42);
+            g.setFont(F_NOM_SUCCES);
+            g.drawString(su.nom, x + 50, y + 22);
+            g.setFont(F_DESC_SUCCES);
+            g.drawString(su.desc, x + 50, y + 42);
             String rec = "+" + su.recompense;
+            g.setFont(F_NOM_SUCCES);
             FontMetrics fm = g.getFontMetrics();
-            g.drawString(rec, x + 425 - fm.stringWidth(rec), y + 21);
+            g.drawString(rec, x + w - 12 - fm.stringWidth(rec), y + 22);
         }
         g.setColor(SOMBRE);
         g.setFont(F_PETIT);
@@ -560,16 +615,18 @@ public class RenduInterface {
         g.setFont(F_GRAND);
         texteCentre(g, "Pendant la partie", W / 2, 150);
         g.setFont(F_MOYEN);
-        g.drawString("Z Q S D / flèches", 180, 198);
-        texteAdapte(g, "Déplacer le personnage", 430, 198, 350, 22);
-        g.drawString("Souris", 180, 240);
-        texteAdapte(g, "Déplacer le personnage vers le curseur", 430, 240, 350, 22);
-        g.drawString("E", 180, 282);
-        texteAdapte(g, "Activer la compétence du personnage", 430, 282, 350, 22);
-        g.drawString("P / Échap", 180, 324);
-        texteAdapte(g, "Mettre en pause ou revenir", 430, 324, 350, 22);
-        g.drawString("F11", 180, 366);
-        texteAdapte(g, "Basculer le plein écran", 430, 366, 350, 22);
+        g.drawString("Z Q S D / flèches", 180, 194);
+        texteAdapte(g, "Déplacer le personnage", 430, 194, 350, 22);
+        g.drawString("Souris", 180, 230);
+        texteAdapte(g, "Déplacer le personnage vers le curseur", 430, 230, 350, 22);
+        g.drawString("E", 180, 266);
+        texteAdapte(g, "Activer la compétence du personnage", 430, 266, 350, 22);
+        g.drawString("Espace / Maj", 180, 302);
+        texteAdapte(g, "Esquiver : bond invulnérable", 430, 302, 350, 22);
+        g.drawString("P / Échap", 180, 338);
+        texteAdapte(g, "Mettre en pause ou revenir", 430, 338, 350, 22);
+        g.drawString("F11", 180, 374);
+        texteAdapte(g, "Basculer le plein écran", 430, 374, 350, 22);
         g.setFont(F_PETIT);
         texteAdapte(g, "Dans les menus : Haut / Bas choisir, Gauche / Droite régler, Entrée valider.",
                 145, 430, 670, 20);
@@ -577,6 +634,8 @@ public class RenduInterface {
                 145, 462, 670, 20);
         texteAdapte(g, "L : ouvrir la coop LAN - dans le salon : H héberger, R rechercher.",
                 145, 490, 670, 20);
+        texteAdapte(g, "Menu : B boutique - N mode (Cauchemar / Infini) - J défi du jour. Niveau : 1 2 3 choisir, R relancer.",
+                145, 518, 670, 20);
         texteCentre(g, "Échap / Entrée : fermer", W / 2, 555);
     }
 
@@ -717,6 +776,50 @@ public class RenduInterface {
     // ------------------------------------------------------------------
     // Menu principal / boutique
     // ------------------------------------------------------------------
+    /** Bouton à texte plus petit, pour les raccourcis du menu. */
+    private void boutonCompact(Graphics2D g, Rectangle r, String texte, Color fond) {
+        g.setColor(fond);
+        g.fillRoundRect(r.x, r.y, r.width, r.height, 28, 28);
+        g.setColor(Color.WHITE);
+        g.setStroke(new BasicStroke(3));
+        g.drawRoundRect(r.x, r.y, r.width, r.height, 28, 28);
+        g.setFont(F_NOM_SUCCES);
+        texteCentre(g, texte, r.x + r.width / 2, r.y + r.height / 2 + 5);
+    }
+
+    /** Boutique complète : toutes les améliorations permanentes. */
+    public void boutique(Graphics2D g, Session s) {
+        Progression pr = s.prog;
+        g.setColor(SOMBRE);
+        g.setFont(F_TITRE);
+        texteCentre(g, "Boutique", W / 2, 70);
+        g.setColor(new Color(255, 130, 170));
+        g.setFont(F_GRAND);
+        texteCentre(g, "Sucre : " + pr.sucre, W / 2, 108);
+        for (int i = 0; i < Progression.NB_META; i++) {
+            Rectangle r = Zones.ligneBoutiquePlus(i);
+            int niv = pr.niveauMeta(i);
+            boolean max = niv >= pr.max(i);
+            boolean possible = !max && pr.sucre >= pr.coutProchain(i);
+            boolean sel = s.boutiqueSel == i;
+            g.setColor(possible ? new Color(255, 255, 255, 235) : new Color(255, 255, 255, 150));
+            g.fillRoundRect(r.x, r.y, r.width, r.height, 22, 22);
+            g.setColor(sel ? new Color(255, 130, 170) : possible ? new Color(180, 155, 220) : new Color(190, 180, 210));
+            g.setStroke(new BasicStroke(sel ? 4 : 2));
+            g.drawRoundRect(r.x, r.y, r.width, r.height, 22, 22);
+            g.setColor(SOMBRE);
+            g.setFont(F_PETIT);
+            g.drawString("[" + (i + 1) + "]  " + Progression.META_NOMS[i], r.x + 16, r.y + 25);
+            String droite = max ? "MAX" : "niv " + niv + "/" + pr.max(i) + "  -  " + pr.coutProchain(i) + " sucre";
+            FontMetrics fm = g.getFontMetrics();
+            g.drawString(droite, r.x + r.width - 16 - fm.stringWidth(droite), r.y + 25);
+        }
+        bouton(g, Zones.boutonBoutiqueRetour(), "Retour (Échap)", new Color(190, 150, 240));
+        g.setColor(SOMBRE);
+        g.setFont(F_PETIT);
+        texteCentre(g, "Haut / Bas : choisir  -  Entrée ou clic : acheter  -  touches 1 à 9 : achat direct", W / 2, 610);
+    }
+
     public void menu(Graphics2D g, Session s) {
         Progression pr = s.prog;
         int sel = s.mondeSel;
@@ -778,21 +881,20 @@ public class RenduInterface {
         g.setFont(F_GRAND);
         texteCentre(g, "Sucre : " + pr.sucre, W / 2, 360);
 
-        String[] noms = {"Coeur de sucre  (+15 PV max)", "Corne affûtée  (+10% dégâts)", "Sabots de vent  (+5% vitesse)"};
         for (int i = 0; i < 3; i++) {
             Rectangle r = Zones.ligneBoutique(i);
             int niv = pr.niveauMeta(i);
-            boolean max = niv >= Constantes.NIV_MAX;
-            boolean possible = !max && pr.sucre >= pr.cout(niv);
+            boolean max = niv >= pr.max(i);
+            boolean possible = !max && pr.sucre >= pr.coutProchain(i);
             g.setColor(possible ? new Color(255, 255, 255, 230) : new Color(255, 255, 255, 145));
             g.fillRoundRect(r.x, r.y, r.width, r.height, 22, 22);
             g.setColor(possible ? new Color(180, 155, 220) : new Color(190, 180, 210));
             g.setStroke(new BasicStroke(2));
             g.drawRoundRect(r.x, r.y, r.width, r.height, 22, 22);
             g.setColor(SOMBRE);
-            g.setFont(F_MOYEN);
-            g.drawString("[" + (i + 1) + "]  " + noms[i], r.x + 18, r.y + 23);
-            String droite = max ? "MAX" : "niv " + niv + "/" + Constantes.NIV_MAX + "  -  " + pr.cout(niv) + " sucre";
+            g.setFont(F_NOM_SUCCES);
+            g.drawString("[" + (i + 1) + "]  " + Progression.META_NOMS[i], r.x + 18, r.y + 23);
+            String droite = max ? "MAX" : "niv " + niv + "/" + pr.max(i) + "  -  " + pr.coutProchain(i) + " sucre";
             FontMetrics fm = g.getFontMetrics();
             g.drawString(droite, r.x + r.width - 18 - fm.stringWidth(droite), r.y + 23);
         }
@@ -802,6 +904,32 @@ public class RenduInterface {
         bouton(g, Zones.boutonParams(), "Paramètres (O)", new Color(150, 170, 230));
         bouton(g, Zones.boutonMultijoueur(), "Coop LAN (L)", new Color(160, 190, 240));
         bouton(g, Zones.boutonQuitter(), "Quitter", new Color(145, 125, 180));
+
+        // mode de jeu, boutique complète, défi du jour
+        String[] nomsModes = {"Normal", "Cauchemar", "Infini"};
+        Color[] couleursModes = {new Color(150, 170, 230), new Color(205, 75, 115), new Color(105, 175, 150)};
+        int mode = s.modeEffectif();
+        boutonCompact(g, Zones.boutonMode(), nomsModes[mode] + " (N)",
+                s.defiSel ? new Color(175, 170, 190) : couleursModes[mode]);
+        g.setFont(F_MINI);
+        g.setColor(new Color(120, 90, 150));
+        if (!pr.gagne[sel]) {
+            g.drawString("Cauchemar, Infini :", 26, 176);
+            g.drawString("bats ce monde", 26, 192);
+        } else if (mode == 1) {
+            g.drawString("Ennemis +35%,", 26, 176);
+            g.drawString("sucre x1,5", 26, 192);
+        } else if (mode == 2) {
+            g.drawString("Un boss toutes", 26, 176);
+            g.drawString("les 90 s", 26, 192);
+        }
+        boutonCompact(g, Zones.boutonBoutique(), "Boutique (B)", new Color(255, 160, 120));
+        boutonCompact(g, Zones.boutonDefi(), s.defiSel ? "Défi ON (J)" : "Défi (J)",
+                s.defiSel ? new Color(255, 130, 170) : new Color(175, 150, 215));
+        g.setFont(F_MINI);
+        g.setColor(new Color(120, 90, 150));
+        g.drawString(Partie.MODIFICATEURS[Partie.modificateurDuJour()], W - 170, 172);
+        if (Partie.dateDuJour().equals(pr.defiDate)) g.drawString("Record : " + pr.defiScore, W - 170, 188);
 
         g.setColor(SOMBRE);
         g.setFont(F_PETIT);
