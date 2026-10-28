@@ -21,9 +21,18 @@ if ([version]$javac.Version -lt [version]"21.0") {
     throw "Java 21 ou plus récent est requis pour compiler ce projet."
 }
 
-Remove-Item $classes -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item $output -Recurse -Force -ErrorAction SilentlyContinue
+foreach ($directory in @($classes, $staging, $output)) {
+    if (Test-Path $directory) {
+        try {
+            Remove-Item $directory -Recurse -Force -ErrorAction Stop
+        } catch {
+            throw "Impossible de supprimer '$directory'. Ferme l'ancien installateur ou toute fenêtre qui l'utilise, puis relance le script. Détail : $($_.Exception.Message)"
+        }
+        if (Test-Path $directory) {
+            throw "Le dossier '$directory' existe encore après suppression. Ferme l'ancien installateur ou toute fenêtre qui l'utilise, puis relance le script."
+        }
+    }
+}
 New-Item -ItemType Directory -Force -Path $classes, $staging, $output | Out-Null
 
 $sources = Get-ChildItem (Join-Path $root "src\main\java") -Recurse -Filter "*.java" |
