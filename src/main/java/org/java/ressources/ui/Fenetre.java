@@ -1,6 +1,7 @@
 package org.java.ressources.ui;
 
 import javax.swing.JFrame;
+import javax.swing.ImageIcon;
 import javax.swing.SwingUtilities;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
@@ -14,6 +15,10 @@ public class Fenetre {
 
     public Fenetre(Jeu jeu) {
         this.jeu = jeu;
+        var icone = Fenetre.class.getResource("/icon.png");
+        if (icone != null) {
+            frame.setIconImage(new ImageIcon(icone).getImage());
+        }
         frame.add(jeu);
         frame.pack();
         frame.setMinimumSize(new Dimension(480, 360));
