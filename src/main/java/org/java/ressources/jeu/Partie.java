@@ -16,6 +16,7 @@ import org.java.ressources.entites.Tir;
 import org.java.ressources.entites.TirEnnemi;
 import org.java.ressources.entites.ZoneDanger;
 import org.java.ressources.entites.Eclair;
+import org.java.ressources.entites.PointInteret;
 import org.java.ressources.donnees.ArmeSecondaire;
 import org.java.ressources.entites.TypeEnnemi;
 import org.java.ressources.entites.TypeArme;
@@ -55,6 +56,9 @@ public class Partie {
     public int projectiles, perforation, etoiles, niveau, xp, xpSuivant, kills;
     public boolean bossApparu, bossTue, degatsSubis;
     private final boolean[] coins = new boolean[4];
+    /** Progression d'exploration de la partie en cours. */
+    public boolean[] secteursVisites = new boolean[0];
+    public int secteursVisitesNb, objectifsTrouves, secretsRun, bonusExploration;
 
     /**
      * Réglages de l'attaque de base d'un personnage. TOUT l'équilibrage est dans le tableau PROFILS.
@@ -270,6 +274,8 @@ public class Partie {
         kills = 0;
         bossApparu = false;
         bossTue = false;
+        secteursVisites = new boolean[Math.max(1, monde.nbSecteurs)];
+        secteursVisitesNb = objectifsTrouves = secretsRun = bonusExploration = 0;
         tBouclier = tTurbo = tXp = 0;
         chanceBonus = 1 + 0.05 * prog.meta[Progression.CHANCE];
         novaT = 0;
@@ -672,7 +678,8 @@ public class Partie {
         boolean vic = gagneLaPartie || victoireAcquise;
         victoire = vic;
         double mult = (cauchemar ? 1.5 : 1.0) * (defiJour ? 1.5 : 1.0);
-        int base = kills / 2 + (int) (temps / 10) + (vic ? 100 * (mondeJeu + 1) : 0) + (infini ? 60 * bossNum : 0);
+        int base = kills / 2 + (int) (temps / 10) + bonusExploration
+                + (vic ? 100 * (mondeJeu + 1) : 0) + (infini ? 60 * bossNum : 0);
         gainRun = (int) Math.round(base * mult);
         prog.sucre += gainRun;
         prog.totalSucre += gainRun;
@@ -733,6 +740,7 @@ public class Partie {
         dernierPx = px;
         dernierPy = py;
         deplacerJoueur(touches);
+        majExploration();
 
         // attaque automatique propre à chaque personnage (voir PROFILS)
         attaqueDeBase();
@@ -1087,14 +1095,95 @@ public class Partie {
             prochainEncerclement = temps + 85;
             encerclement();
         }
-        if (!bossApparu && temps >= monde.dureeBoss) {
+        if (!bossApparu && temps >= seuilBoss()) {
             bossApparu = true;
             spawnEnnemi(TypeEnnemi.BOSS, true);
+            annonce("Le chemin vers " + monde.boss + " est ouvert !");
         } else if (infini && bossApparu && prochainBoss > 0 && temps >= prochainBoss && bossVivant()) {
             prochainBoss = 0;
             spawnEnnemi(TypeEnnemi.BOSS, true);
             annonce("Un nouveau boss arrive, plus solide !");
         }
+    }
+
+    /**
+     * Le boss n'est plus une simple minuterie : sans exploration il attend la durée cible,
+     * tandis que les secteurs et découvertes rapprochent progressivement le seuil historique.
+     */
+    public double seuilBoss() {
+        if (infini) return monde.dureeBoss;
+        double secteurs = Math.min(1, secteursVisitesNb / (double) Math.max(1, monde.nbSecteurs));
+        double objectifs = Math.min(1, objectifsTrouves / (double) Math.max(1, monde.objectifsRequis));
+        double progression = (secteurs + objectifs) / 2.0;
+        return monde.dureeCible - (monde.dureeCible - monde.dureeBoss) * progression;
+    }
+
+    /** Révèle les découvertes proches et valide la visite de secteurs par n'importe quel joueur de la coop. */
+    private void majExploration() {
+        visiterSecteur(px, py);
+        for (JoueurReseau joueur : joueursReseau) visiterSecteur(joueur.x, joueur.y);
+        for (PointInteret point : carte.pointsInteret) {
+            if (point.trouve) continue;
+            double distance = Math.hypot(px - point.x, py - point.y);
+            for (JoueurReseau joueur : joueursReseau) {
+                distance = Math.min(distance, Math.hypot(joueur.x - point.x, joueur.y - point.y));
+            }
+            if (distance < 260) point.revele = true;
+            if (point.revele && distance < 42) decouvrir(point);
+        }
+    }
+
+    private void visiterSecteur(double x, double y) {
+        int secteur = carte.secteur(x, y);
+        if (secteur >= 0 && secteur < secteursVisites.length && !secteursVisites[secteur]) {
+            secteursVisites[secteur] = true;
+            secteursVisitesNb++;
+            annonce("Secteur exploré : " + secteursVisitesNb + "/" + monde.nbSecteurs);
+        }
+    }
+
+    private void decouvrir(PointInteret point) {
+        point.trouve = true;
+        objectifsTrouves++;
+        bonusExploration += 8;
+        switch (point.type) {
+            case COFFRE -> {
+                for (int i = 0; i < 8; i++) ajouterGemme(point.x, point.y, 2);
+                annonce("Coffre trouvé : pluie d'expérience !");
+            }
+            case RELIQUE -> {
+                tTurbo = Math.max(tTurbo, 18);
+                tBouclier = Math.max(tBouclier, 5);
+                annonce("Relique activée : turbo et bouclier !");
+            }
+            case ELITE -> {
+                Ennemi elite = creerEnnemiA(TypeEnnemi.GUIMAUVE, point.x, point.y);
+                if (elite != null) {
+                    elite.elite = true;
+                    elite.pvMax *= 3.5;
+                    elite.pv = elite.pvMax;
+                    elite.rayon *= 1.25;
+                }
+                annonce("Gardien de secteur réveillé !");
+            }
+            case SECRET -> {
+                secretsRun++;
+                for (int i = 0; i < 12; i++) ajouterGemme(point.x, point.y, 2);
+                if (!prog.secretMonde[mondeJeu]) {
+                    prog.secretMonde[mondeJeu] = true;
+                    prog.secretsTrouves++;
+                    annonce("Secret persistant découvert !");
+                } else annonce("Cachette secrète : récompense de run !");
+            }
+        }
+    }
+
+    private void ajouterGemme(double x, double y, int valeur) {
+        Gemme gemme = new Gemme();
+        gemme.x = x + rnd.nextGaussian() * 20;
+        gemme.y = y + rnd.nextGaussian() * 20;
+        gemme.valeur = valeur;
+        gemmes.add(gemme);
     }
 
     boolean bossVivant() {

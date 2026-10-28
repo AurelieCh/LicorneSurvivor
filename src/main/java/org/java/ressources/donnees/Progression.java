@@ -37,6 +37,9 @@ public class Progression {
     public final int[] meta = new int[NB_META];
     public int personnageSel;
     public int mondeMax = 0, totalKills = 0, totalSucre = 0, parties = 0, achats = 0, totalEsquives = 0;
+    /** Secrets distincts vus au moins une fois : statistique persistante, les récompenses de run restent rejouables. */
+    public int secretsTrouves;
+    public final boolean[] secretMonde = new boolean[Monde.TOUS.length];
     public final double[] meilleur = new double[Monde.TOUS.length];
     public final boolean[] gagne = new boolean[Monde.TOUS.length];
     public final Set<String> succesOk = new HashSet<>();
@@ -118,9 +121,11 @@ public class Progression {
         totalKills = totalSucre = parties = achats = totalEsquives = 0;
         defiDate = "";
         defiScore = 0;
+        secretsTrouves = 0;
         for (int i = 0; i < Monde.TOUS.length; i++) {
             meilleur[i] = 0;
             gagne[i] = false;
+            secretMonde[i] = false;
         }
         succesOk.clear();
         armesUtilisees.clear();

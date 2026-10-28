@@ -42,11 +42,13 @@ public final class Sauvegarde {
             pr.parties = entier(p, "parties", 0);
             pr.achats = entier(p, "achats", 0);
             pr.totalEsquives = entier(p, "totalEsquives", 0);
+            pr.secretsTrouves = entier(p, "secretsTrouves", 0);
             pr.defiDate = p.getProperty("defiDate", "");
             pr.defiScore = entier(p, "defiScore", 0);
             for (int i = 0; i < Monde.TOUS.length; i++) {
                 pr.meilleur[i] = entier(p, "meilleur" + i, 0);
                 pr.gagne[i] = "true".equals(p.getProperty("gagne" + i));
+                pr.secretMonde[i] = "true".equals(p.getProperty("secretMonde" + i));
             }
             String s = p.getProperty("succes", "");
             if (!s.isEmpty()) Collections.addAll(pr.succesOk, s.split(","));
@@ -80,11 +82,13 @@ public final class Sauvegarde {
         p.setProperty("parties", String.valueOf(pr.parties));
         p.setProperty("achats", String.valueOf(pr.achats));
         p.setProperty("totalEsquives", String.valueOf(pr.totalEsquives));
+        p.setProperty("secretsTrouves", String.valueOf(pr.secretsTrouves));
         p.setProperty("defiDate", pr.defiDate);
         p.setProperty("defiScore", String.valueOf(pr.defiScore));
         for (int i = 0; i < Monde.TOUS.length; i++) {
             p.setProperty("meilleur" + i, String.valueOf((int) pr.meilleur[i]));
             p.setProperty("gagne" + i, String.valueOf(pr.gagne[i]));
+            p.setProperty("secretMonde" + i, String.valueOf(pr.secretMonde[i]));
         }
         p.setProperty("succes", String.join(",", pr.succesOk));
 

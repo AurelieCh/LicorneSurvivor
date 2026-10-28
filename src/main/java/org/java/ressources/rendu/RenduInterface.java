@@ -208,8 +208,18 @@ public class RenduInterface {
             texteCentre(g, p.annonce, W / 2, 196);
         }
 
+        // progression de l'exploration : les secteurs et découvertes raccourcissent l'attente du boss.
+        if (s.etat == org.java.ressources.jeu.Etat.JEU && !p.bossApparu) {
+            g.setFont(F_MINI);
+            String exploration = "Exploration : secteurs " + p.secteursVisitesNb + "/" + mo.nbSecteurs
+                    + "  •  découvertes " + p.objectifsTrouves + "/" + mo.objectifsRequis;
+            int w = g.getFontMetrics().stringWidth(exploration) + 26;
+            plaque(g, W / 2 - w / 2, 42, w, 22);
+            g.setColor(SOMBRE);
+            texteCentre(g, exploration, W / 2, 58);
+        }
         // alerte boss
-        if (s.etat == org.java.ressources.jeu.Etat.JEU && !p.bossApparu && p.temps >= mo.dureeBoss - 15) {
+        if (s.etat == org.java.ressources.jeu.Etat.JEU && !p.bossApparu && p.temps >= p.seuilBoss() - 15) {
             g.setFont(F_GRAND);
             String t = mo.boss + " arrive...";
             int w = g.getFontMetrics().stringWidth(t) + 40;
@@ -317,6 +327,19 @@ public class RenduInterface {
         }
         g.setColor(new Color(255, 230, 80));
         for (Bonus b : p.bonus) g.fillRect((int) (x + b.x * sc) - 1, (int) (y + b.y * sc) - 1, 3, 3);
+        // Les points d'intérêt révélés, et seulement eux, sont repérables sur la mini-carte.
+        for (org.java.ressources.entites.PointInteret point : c.pointsInteret) {
+            if (!point.revele || point.trouve) continue;
+            g.setColor(point.type == org.java.ressources.entites.PointInteret.Type.SECRET
+                    ? new Color(205, 135, 255) : new Color(255, 215, 80));
+            g.fillOval((int) (x + point.x * sc) - 2, (int) (y + point.y * sc) - 2, 5, 5);
+        }
+        g.setColor(new Color(120, 220, 170, 130));
+        if (c.monde.nbSecteurs == 4) {
+            int mx = (int) (x + c.largeur * sc / 2), my = (int) (y + c.hauteur * sc / 2);
+            g.drawLine(mx, y, mx, y + MINI_H);
+            g.drawLine(x, my, x + MINI_W, my);
+        }
         g.setColor(Color.WHITE);
         g.setStroke(new BasicStroke(1.2f));
         g.drawRect((int) (x + p.camX * sc), (int) (y + p.camY * sc), (int) (W * sc), (int) (H * sc));
@@ -407,8 +430,12 @@ public class RenduInterface {
         g.setFont(F_MOYEN);
         if (p.victoire) texteCentre(g, "Boss vaincu : " + mo.boss + "  (" + mo.nom + ")", W / 2, 210);
         else texteCentre(g, mo.nom, W / 2, 210);
+        g.setFont(F_PETIT);
+        g.setColor(new Color(255, 235, 200));
+        texteCentre(g, mo.objectifExploration, W / 2, 238);
         g.setFont(F_GRAND);
-        texteCentre(g, "Survie : " + chrono(p.temps) + "     Sucreries vaincues : " + p.kills, W / 2, 280);
+        g.setColor(Color.WHITE);
+        texteCentre(g, "Durée : " + chrono(p.temps) + "     Sucreries vaincues : " + p.kills, W / 2, 280);
         g.setColor(new Color(255, 220, 120));
         texteCentre(g, "+ " + p.gainRun + " sucre   (total : " + s.prog.sucre + ")", W / 2, 335);
         if (p.nouveauMonde) {
@@ -430,9 +457,13 @@ public class RenduInterface {
         } else {
             texteCentre(g, "Esquives : " + p.esquivesRun, W / 2, 430);
         }
+        g.setFont(F_PETIT);
+        g.setColor(new Color(255, 235, 200));
+        texteCentre(g, "Exploration : " + p.secteursVisitesNb + "/" + mo.nbSecteurs + " secteurs  •  "
+                + p.objectifsTrouves + " découvertes  •  " + p.secretsRun + " secret(s)", W / 2, 452);
         g.setColor(Color.WHITE);
         g.setFont(F_MOYEN);
-        texteCentre(g, "ESPACE : boutique et nouvelle partie", W / 2, 470);
+        texteCentre(g, "ESPACE : boutique et nouvelle partie", W / 2, 492);
     }
 
     // ------------------------------------------------------------------

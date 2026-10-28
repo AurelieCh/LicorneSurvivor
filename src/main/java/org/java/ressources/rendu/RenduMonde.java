@@ -9,6 +9,7 @@ import org.java.ressources.entites.Ennemi;
 import org.java.ressources.entites.Gemme;
 import org.java.ressources.entites.Obstacle;
 import org.java.ressources.entites.Particule;
+import org.java.ressources.entites.PointInteret;
 import org.java.ressources.entites.Tir;
 import org.java.ressources.entites.TypeArme;
 import org.java.ressources.jeu.Carte;
@@ -134,6 +135,11 @@ public class RenduMonde {
             if (o.plat && o.x > x0 - 100 && o.x < x1 + 100 && o.y > y0 - 100 && o.y < y1 + 100) CacheRendu.obstacle(g, o, anim);
         }
         EffetsCombat.sol(g, p, anim);
+        // Les découvertes ne deviennent visibles qu'après détection : pas de balises gratuites sur toute la carte.
+        for (PointInteret point : c.pointsInteret) {
+            if (!point.revele || point.trouve || point.x < x0 || point.x > x1 || point.y < y0 || point.y > y1) continue;
+            dessinerPointInteret(g, point, anim);
+        }
         double echelleRendu = CacheRendu.echelle();
         int maxGemmesDessinees = Math.max(120, (int) (MAX_GEMMES_DESSINEES
                 / Math.max(1, echelleRendu * echelleRendu)));
@@ -244,6 +250,23 @@ public class RenduMonde {
         g.setColor(new Color(120, 220, 170));
         g.fillRoundRect((int) joueur.x - 18, (int) joueur.y - 30,
                 (int) (36 * Math.clamp(joueur.vie / 100, 0, 1)), 4, 4, 4);
+    }
+
+    private static void dessinerPointInteret(Graphics2D g, PointInteret point, double anim) {
+        int x = (int) point.x, y = (int) (point.y + Math.sin(anim * 3 + point.x) * 3);
+        Color couleur = switch (point.type) {
+            case COFFRE -> new Color(255, 210, 70);
+            case RELIQUE -> new Color(120, 220, 255);
+            case ELITE -> new Color(255, 105, 130);
+            case SECRET -> new Color(205, 135, 255);
+        };
+        g.setColor(new Color(couleur.getRed(), couleur.getGreen(), couleur.getBlue(), 65));
+        g.fillOval(x - 25, y - 25, 50, 50);
+        g.setColor(couleur);
+        g.fillRoundRect(x - 10, y - 8, 20, 16, 5, 5);
+        g.setColor(Color.WHITE);
+        g.drawRoundRect(x - 10, y - 8, 20, 16, 5, 5);
+        g.drawLine(x, y - 7, x, y + 7);
     }
 
     private static void dessinerTir(Graphics2D g, Tir t, double anim, int largeurCarte, int hauteurCarte) {

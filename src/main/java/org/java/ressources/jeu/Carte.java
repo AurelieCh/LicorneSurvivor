@@ -3,6 +3,7 @@ package org.java.ressources.jeu;
 import org.java.ressources.donnees.Monde;
 import org.java.ressources.entites.Decor;
 import org.java.ressources.entites.Obstacle;
+import org.java.ressources.entites.PointInteret;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -23,6 +24,8 @@ public class Carte {
     public final List<Obstacle> solides = new ArrayList<>();
     public final List<Obstacle> dangers = new ArrayList<>();
     public final List<Decor> decors = new ArrayList<>();
+    /** Récompenses et événements distants, répartis sur les secteurs logiques de la carte. */
+    public final List<PointInteret> pointsInteret = new ArrayList<>();
     /** Image de la mini-carte (créée à la demande par le rendu). */
     public BufferedImage mini;
 
@@ -126,7 +129,52 @@ public class Carte {
             if (c.libre(d.x, d.y, 0)) continue;
             c.decors.add(d);
         }
+        c.genererPointsInteret(rnd);
         return c;
+    }
+
+    private void genererPointsInteret(Random rnd) {
+        int secteurs = Math.max(1, monde.nbSecteurs);
+        double cx = largeur / 2.0, cy = hauteur / 2.0;
+        for (int n = 0; n < monde.nbPointsInteret; n++) {
+            int secteur = n % secteurs;
+            PointInteret p = new PointInteret();
+            p.secteur = secteur;
+            p.type = PointInteret.Type.values()[n % PointInteret.Type.values().length];
+            boolean pose = false;
+            // Les quatre secteurs sont des quadrants : la boucle garde les points loin du départ et des murs.
+            for (int essai = 0; essai < 180 && !pose; essai++) {
+                double x = 110 + rnd.nextDouble() * (largeur - 220);
+                double y = 110 + rnd.nextDouble() * (hauteur - 220);
+                if (secteurs == 4) {
+                    x = (secteur % 2 == 0) ? 90 + rnd.nextDouble() * (cx - 220)
+                            : cx + 130 + rnd.nextDouble() * (largeur - cx - 220);
+                    y = (secteur < 2) ? 90 + rnd.nextDouble() * (cy - 220)
+                            : cy + 130 + rnd.nextDouble() * (hauteur - cy - 220);
+                }
+                if (Math.hypot(x - cx, y - cy) < Math.min(largeur, hauteur) * .22 || libre(x, y, 34)) continue;
+                boolean distinct = true;
+                for (PointInteret autre : pointsInteret) {
+                    if (Math.hypot(x - autre.x, y - autre.y) < 170) { distinct = false; break; }
+                }
+                if (distinct) { p.x = x; p.y = y; pose = true; }
+            }
+            // Le générateur d'obstacles ne ferme pas la carte ; ce repli reste jouable et explicite.
+            if (!pose) {
+                double angle = secteur * Math.PI / 2 + .45;
+                p.x = Math.clamp(largeur - 70, 70, cx + Math.cos(angle) * largeur * .31);
+                p.y = Math.clamp(hauteur - 70, 70, cy + Math.sin(angle) * hauteur * .31);
+                double[] corrige = repousser(p.x, p.y, 34);
+                if (corrige != null) { p.x = corrige[0]; p.y = corrige[1]; }
+            }
+            pointsInteret.add(p);
+        }
+    }
+
+    /** Secteur logique du point, compatible avec les mondes actuels à quatre quadrants. */
+    public int secteur(double x, double y) {
+        if (monde.nbSecteurs != 4) return 0;
+        return (x >= largeur / 2.0 ? 1 : 0) + (y >= hauteur / 2.0 ? 2 : 0);
     }
 
     /** Vrai si le cercle (x, y, r) ne touche aucun obstacle solide. */

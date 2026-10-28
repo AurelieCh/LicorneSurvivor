@@ -61,6 +61,12 @@ public class Monde {
     public Color bossCol;
     public double bossPv;
     public int dureeBoss;
+    /** Durée de référence d'un clear exploré, en secondes. */
+    public int dureeCible;
+    /** Nombre de secteurs et de découvertes à viser avant le boss. */
+    public int nbSecteurs, objectifsRequis, nbPointsInteret;
+    /** Petit texte utilisé par le HUD et l'écran de fin. */
+    public String objectifExploration;
     public Color[] palette;
     public double diff;
     // carte
@@ -101,6 +107,16 @@ public class Monde {
         return this;
     }
 
+    Monde exploration(int dureeCible, int nbSecteurs, int objectifsRequis, int nbPointsInteret,
+                      String objectifExploration) {
+        this.dureeCible = dureeCible;
+        this.nbSecteurs = nbSecteurs;
+        this.objectifsRequis = objectifsRequis;
+        this.nbPointsInteret = nbPointsInteret;
+        this.objectifExploration = objectifExploration;
+        return this;
+    }
+
     Monde obstacles(TypeObstacle... t) {
         this.obstacles = t;
         return this;
@@ -119,6 +135,7 @@ public class Monde {
                             new Color(255, 160, 190), new Color(160, 235, 200), new Color(190, 170, 240),
                             new Color(255, 200, 150), new Color(150, 200, 255))
                     .carte(2400, 1600, 85, 700, new Color(255, 226, 238), new Color(214, 150, 200))
+                    .exploration(300, 4, 3, 6, "Explore les clairières et retrouve les trésors sucrés")
                     .obstacles(TypeObstacle.haut(38, 52, 0.80, 3),    // cupcake géant
                             TypeObstacle.haut(34, 46, 0.34, 3),       // sucette-arbre
                             TypeObstacle.haut(36, 54, 0.90, 2),       // cristaux de sucre candi
@@ -133,6 +150,7 @@ public class Monde {
                             new Color(160, 235, 200), new Color(150, 200, 255), new Color(220, 205, 255),
                             new Color(255, 240, 160))
                     .carte(3000, 2000, 130, 900, new Color(52, 94, 108), new Color(12, 26, 46))
+                    .exploration(390, 4, 3, 7, "Éclaire la forêt et brise les cachettes de guimauve")
                     .obstacles(TypeObstacle.haut(44, 62, 0.32, 4),    // arbre guimauve
                             TypeObstacle.haut(34, 50, 0.45, 3),       // champignon géant
                             TypeObstacle.eau(70, 110, 0.95, 1.2),     // étang
@@ -147,6 +165,7 @@ public class Monde {
                             new Color(230, 170, 100), new Color(170, 110, 80), new Color(255, 130, 130),
                             new Color(255, 180, 110))
                     .carte(3600, 2400, 170, 1100, new Color(72, 42, 34), new Color(26, 12, 10))
+                    .exploration(480, 4, 3, 8, "Traverse le volcan et sécurise les reliques de caramel")
                     .obstacles(TypeObstacle.haut(40, 60, 0.50, 4),    // pic de chocolat
                             TypeObstacle.haut(36, 54, 0.90, 3),       // rocher fondu
                             TypeObstacle.lave(60, 100, 0.85, 2.5),    // mare de lave
