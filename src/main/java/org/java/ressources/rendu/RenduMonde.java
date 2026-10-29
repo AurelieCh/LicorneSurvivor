@@ -125,14 +125,14 @@ public class RenduMonde {
 
         double x0 = p.camX - 140, x1 = p.camX + W + 140, y0 = p.camY - 140, y1 = p.camY + H + 140;
 
-        dessinerSol(g, m, p);
+        dessinerSol(g, m, p, anim);
         Bordures.dessiner(g, m, p.camX, p.camY, false);
 
         for (Decor d : c.decors) {
             if (d.x > x0 && d.x < x1 && d.y > y0 && d.y < y1) CacheRendu.decor(g, d, anim);
         }
         for (Obstacle o : c.obstacles) { // zones plates : étangs, lave
-            if (o.plat && o.x > x0 - 100 && o.x < x1 + 100 && o.y > y0 - 100 && o.y < y1 + 100) CacheRendu.obstacle(g, o, anim);
+            if (o.plat && !o.riviere && o.x > x0 - 100 && o.x < x1 + 100 && o.y > y0 - 100 && o.y < y1 + 100) CacheRendu.obstacle(g, o, anim);
         }
         EffetsCombat.sol(g, p, anim);
         // Les découvertes ne deviennent visibles qu'après détection : pas de balises gratuites sur toute la carte.
@@ -337,7 +337,7 @@ public class RenduMonde {
     }
 
 
-    private void dessinerSol(Graphics2D g, Monde m, Partie p) {
+    private void dessinerSol(Graphics2D g, Monde m, Partie p, double anim) {
         BufferedImage img = Sols.de(m);
         int t = Sols.T;
         Shape ancien = g.getClip();
@@ -346,6 +346,8 @@ public class RenduMonde {
         for (int y = yDebut; y < p.camY + H + t; y += t) {
             for (int x = xDebut; x < p.camX + W + t; x += t) g.drawImage(img, x, y, null);
         }
+        // géographie : teintes continues, sentiers, rivière et gués
+        RenduTerrain.dessiner(g, p.carte.terrain, m.id, p.camX, p.camY, anim);
         g.setClip(ancien);
     }
 
@@ -467,7 +469,9 @@ public class RenduMonde {
         g.setColor(Dessin.melange(m.sol, Color.BLACK, 0.25));
         g.fillRect(0, 0, mw, mh);
         g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        RenduTerrain.mini(g, c.terrain, m.id, sc);
         for (Obstacle o : c.obstacles) {
+            if (o.riviere) continue; // déjà tracée d'un seul trait
             Color col;
             if (o.danger) col = new Color(255, 110, 40);
             else if (o.plat) col = new Color(80, 170, 210);

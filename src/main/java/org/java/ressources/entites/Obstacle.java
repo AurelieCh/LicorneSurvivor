@@ -8,6 +8,8 @@ public class Obstacle {
     public int monde, type;
     public double x, y, r, echelle, graine;
     public boolean solide, danger, plat;
+    /** Maillon invisible de la rivière : il bloque (ou brûle) mais c'est le terrain qui le dessine. */
+    public boolean riviere;
     /** Image pré-dessinée par le rendu (cache). Jamais lue par la logique du jeu. */
     public Object cache;
 }

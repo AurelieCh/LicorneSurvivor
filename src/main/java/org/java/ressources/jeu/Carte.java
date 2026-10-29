@@ -20,6 +20,8 @@ public class Carte {
 
     public final Monde monde;
     public final int largeur, hauteur;
+    /** Rivière, gués, sentiers et champs de bruit (forêt, fleurs) : la géographie de la carte. */
+    public final Terrain terrain;
     public final List<Obstacle> obstacles = new ArrayList<>();
     public final List<Obstacle> solides = new ArrayList<>();
     public final List<Obstacle> dangers = new ArrayList<>();
@@ -29,28 +31,30 @@ public class Carte {
     /** Image de la mini-carte (créée à la demande par le rendu). */
     public BufferedImage mini;
 
-    private Carte(Monde monde) {
+    private Carte(Monde monde, Random rnd) {
         this.monde = monde;
         this.largeur = monde.largeur;
         this.hauteur = monde.hauteur;
+        this.terrain = Terrain.generer(monde, rnd);
     }
 
     public static Carte generer(Monde m, Random rnd) {
-        Carte c = new Carte(m);
+        Carte c = new Carte(m, rnd);
+        Terrain t = c.terrain;
         double cx = c.largeur / 2.0, cy = c.hauteur / 2.0;
 
-        // des « bosquets » : les obstacles ont tendance à se regrouper, ça crée des zones et des couloirs
-        int nbBosquets = 7 + m.id * 2;
-        double[][] bosquets = new double[nbBosquets][2];
-        for (double[] b : bosquets) {
-            b[0] = 250 + rnd.nextDouble() * (c.largeur - 500);
-            b[1] = 250 + rnd.nextDouble() * (c.hauteur - 500);
-        }
+        c.poserRiviere();
+        // Les découvertes sont placées avant les obstacles : ce sont les obstacles qui s'écartent d'elles.
+        c.genererPointsInteret(rnd);
+        List<double[]> cibles = new ArrayList<>();
+        for (PointInteret p : c.pointsInteret) cibles.add(new double[]{p.x, p.y});
+        t.tracerSentiers(cx, cy, cibles, rnd);
+
         double total = 0;
-        for (Monde.TypeObstacle t : m.obstacles) total += t.poids;
+        for (Monde.TypeObstacle to : m.obstacles) total += to.poids;
 
         int essais = 0;
-        while (c.obstacles.size() < m.nbObstacles && essais++ < m.nbObstacles * 50) {
+        while (c.obstacles.size() < m.nbObstacles + c.nbMaillonsRiviere && essais++ < m.nbObstacles * 60) {
             // choix du type selon les poids
             double r = rnd.nextDouble() * total;
             int ti = 0;
@@ -61,27 +65,38 @@ public class Carte {
                     break;
                 }
             }
-            Monde.TypeObstacle t = m.obstacles[ti];
-            double u = t.uMin + rnd.nextDouble() * (t.uMax - t.uMin);
-            double rayon = u * t.coll;
+            Monde.TypeObstacle to = m.obstacles[ti];
+            double u = to.uMin + rnd.nextDouble() * (to.uMax - to.uMin);
+            double rayon = u * to.coll;
 
-            double x, y;
-            if (rnd.nextDouble() < 0.65) {
-                double[] b = bosquets[rnd.nextInt(nbBosquets)];
-                x = b[0] + rnd.nextGaussian() * 320;
-                y = b[1] + rnd.nextGaussian() * 260;
-            } else {
-                x = rnd.nextDouble() * c.largeur;
-                y = rnd.nextDouble() * c.hauteur;
-            }
+            double x = rnd.nextDouble() * c.largeur, y = rnd.nextDouble() * c.hauteur;
             double marge = 90 + u;
             if (x < marge || x > c.largeur - marge || y < marge || y > c.hauteur - marge) continue;
             if (Math.hypot(x - cx, y - cy) < 300 + u) continue; // clairière de départ
 
+            // Forêt : les obstacles hauts se concentrent dans les zones denses, les étangs / mares dans les clairières.
+            // Ce champ est continu, donc les bois ont des contours naturels au lieu de se découper en secteurs.
+            double dens = t.foret(x, y);
+            double accepte = to.plat ? 0.25 + 0.75 * (1 - dens) : 0.05 + 0.95 * Math.pow(dens, 1.5);
+            if (rnd.nextDouble() > accepte) continue;
+
+            // jamais sur la rivière, ses gués, un sentier ou une découverte
+            if (t.distRiviere(x, y) < rayon + t.demiLargeur() + 24) continue;
+            if (t.distGue(x, y) < Terrain.DEMI_GUE + 70 + rayon) continue;
+            if (t.distSentier(x, y) < rayon + Terrain.LARGEUR_SENTIER / 2 + 14) continue;
+            boolean pres = false;
+            for (PointInteret p : c.pointsInteret) {
+                if (Math.hypot(x - p.x, y - p.y) < rayon + 110) {
+                    pres = true;
+                    break;
+                }
+            }
+            if (pres) continue;
+
             // on laisse toujours un passage d'au moins 64 px entre deux obstacles solides
             boolean ok = true;
             for (Obstacle o : c.obstacles) {
-                double ecart = (t.solide && o.solide) ? 64 : 10;
+                double ecart = (to.solide && o.solide) ? 64 : 10;
                 if (Math.hypot(x - o.x, y - o.y) < rayon + o.r + ecart) {
                     ok = false;
                     break;
@@ -97,18 +112,19 @@ public class Carte {
             o.echelle = u;
             o.r = rayon;
             o.graine = rnd.nextDouble();
-            o.solide = t.solide;
-            o.danger = t.danger;
-            o.plat = t.plat;
+            o.solide = to.solide;
+            o.danger = to.danger;
+            o.plat = to.plat;
             c.obstacles.add(o);
             if (o.solide) c.solides.add(o);
             if (o.danger) c.dangers.add(o);
         }
 
-        // décors
+        // décors : ils se regroupent en champs (fleurs, herbes...) et laissent libres l'eau et les sentiers
         double totalDecor = 0;
         for (Monde.TypeDecor d : m.decors) totalDecor += d.poids;
-        for (int n = 0; n < m.nbDecors; n++) {
+        int poses = 0;
+        for (int n = 0; poses < m.nbDecors && n < m.nbDecors * 6; n++) {
             double r = rnd.nextDouble() * totalDecor;
             int ti = 0;
             for (int i = 0; i < m.decors.length; i++) {
@@ -118,19 +134,62 @@ public class Carte {
                     break;
                 }
             }
-            Monde.TypeDecor t = m.decors[ti];
+            Monde.TypeDecor td = m.decors[ti];
+            double x = 20 + rnd.nextDouble() * (c.largeur - 40);
+            double y = 20 + rnd.nextDouble() * (c.hauteur - 40);
+            if (rnd.nextDouble() > 0.12 + 0.88 * t.fleurs(x, y)) continue;
+            if (t.distRiviere(x, y) < t.demiLargeur() + 6) continue;
+            if (t.distSentier(x, y) < Terrain.LARGEUR_SENTIER / 2) continue;
             Decor d = new Decor();
             d.monde = m.id;
             d.type = ti;
-            d.x = 20 + rnd.nextDouble() * (c.largeur - 40);
-            d.y = 20 + rnd.nextDouble() * (c.hauteur - 40);
-            d.taille = t.tMin + rnd.nextDouble() * (t.tMax - t.tMin);
+            d.x = x;
+            d.y = y;
+            d.taille = td.tMin + rnd.nextDouble() * (td.tMax - td.tMin);
             d.graine = rnd.nextDouble();
             if (c.libre(d.x, d.y, 0)) continue;
             c.decors.add(d);
+            poses++;
         }
-        c.genererPointsInteret(rnd);
+
+        // filet de sécurité : une découverte de repli ne doit jamais être coincée dans un obstacle
+        for (PointInteret p : c.pointsInteret) {
+            if (!c.libre(p.x, p.y, 34)) continue;
+            double[] corrige = c.repousser(p.x, p.y, 34);
+            if (corrige != null) {
+                p.x = corrige[0];
+                p.y = corrige[1];
+            }
+        }
         return c;
+    }
+
+    private int nbMaillonsRiviere;
+
+    /**
+     * Pose la rivière : une chaîne de cercles invisibles qui bloquent le passage (ou brûlent, dans le volcan).
+     * Le dessin se fait ailleurs, d'un seul trait. Aux gués, la chaîne s'interrompt : on traverse à pied.
+     */
+    private void poserRiviere() {
+        double rayon = terrain.demiLargeur() * 0.92;
+        for (double[] p : terrain.riviere) {
+            if (p[0] < 0 || p[0] > largeur || p[1] < 0 || p[1] > hauteur) continue;
+            if (terrain.distGue(p[0], p[1]) < Terrain.DEMI_GUE) continue;
+            Obstacle o = new Obstacle();
+            o.monde = monde.id;
+            o.x = p[0];
+            o.y = p[1];
+            o.echelle = 1;
+            o.r = rayon;
+            o.riviere = true;
+            o.plat = true;
+            o.solide = !terrain.lave;
+            o.danger = terrain.lave;
+            obstacles.add(o);
+            if (o.solide) solides.add(o);
+            if (o.danger) dangers.add(o);
+            nbMaillonsRiviere++;
+        }
     }
 
     private void genererPointsInteret(Random rnd) {
@@ -153,17 +212,18 @@ public class Carte {
                             : cy + 130 + rnd.nextDouble() * (hauteur - cy - 220);
                 }
                 if (Math.hypot(x - cx, y - cy) < Math.min(largeur, hauteur) * .22 || libre(x, y, 34)) continue;
+                if (terrain.distRiviere(x, y) < terrain.demiLargeur() + 110) continue;
                 boolean distinct = true;
                 for (PointInteret autre : pointsInteret) {
                     if (Math.hypot(x - autre.x, y - autre.y) < 170) { distinct = false; break; }
                 }
                 if (distinct) { p.x = x; p.y = y; pose = true; }
             }
-            // Le générateur d'obstacles ne ferme pas la carte ; ce repli reste jouable et explicite.
+            // Repli jouable et explicite si aucune place n'a été trouvée.
             if (!pose) {
                 double angle = secteur * Math.PI / 2 + .45;
-                p.x = Math.clamp(largeur - 70, 70, cx + Math.cos(angle) * largeur * .31);
-                p.y = Math.clamp(hauteur - 70, 70, cy + Math.sin(angle) * hauteur * .31);
+                p.x = Math.clamp(cx + Math.cos(angle) * largeur * .31, 70, largeur - 70);
+                p.y = Math.clamp(cy + Math.sin(angle) * hauteur * .31, 70, hauteur - 70);
                 double[] corrige = repousser(p.x, p.y, 34);
                 if (corrige != null) { p.x = corrige[0]; p.y = corrige[1]; }
             }
@@ -220,8 +280,8 @@ public class Carte {
             }
             if (!change) break;
         }
-        double nx = Math.clamp(largeur - MARGE, MARGE, x);
-        double ny = Math.clamp(hauteur - MARGE, MARGE, y);
+        double nx = Math.clamp(x, MARGE, largeur - MARGE);
+        double ny = Math.clamp(y, MARGE, hauteur - MARGE);
         if (nx != x || ny != y) {
             touche = true;
             x = nx;
